@@ -111,29 +111,46 @@ function initialize() {
   bindNavigationKeyboard();
 
   loadCatalog()
-    .then(function () {
-      renderLibrary();
+    .then(
+      function () {
+        renderLibrary();
 
-      const firstScan = state.catalog?.[0];
+        if (
+          state.catalog.length >
+          0
+        ) {
+          return loadScan(
+            state.catalog[0]
+          );
+        }
 
-      if (firstScan) {
-        return loadScan(firstScan);
+        setViewerStatus(
+          "No scans available",
+          "idle"
+        );
+
+        setStatus(
+          "No scans found in catalog.json",
+          "idle"
+        );
+
+        return null;
       }
+    )
+    .catch(
+      function (error) {
+        console.error(
+          "Application startup failed:",
+          error
+        );
 
-      setViewerStatus("No scans available", "idle");
-      setStatus("No scans found in catalog.json", "idle");
-
-      return null;
-    })
-    .catch(function (error) {
-      console.error("Application startup failed:", error);
-      setStatus("Application startup failed.", "error");
-    });
+        setStatus(
+          "Application startup failed.",
+          "error"
+        );
+      }
+    );
 }
-
-console.log("state:", state);
-console.log("catalog:", state?.catalog);
-console.log("first catalog item:", state?.catalog?.[0]);
 
 
 /* -------------------------------------------------------------------------- */
@@ -6889,7 +6906,7 @@ function fitBounds(
     Camera field of view.
   */
   var fov =
-    60;
+    50;
 
   if (
     typeof viewer.getFOV ===
@@ -6906,7 +6923,7 @@ function fitBounds(
     fov <= 0
   ) {
     fov =
-      60;
+      50;
   }
 
   var verticalFov =

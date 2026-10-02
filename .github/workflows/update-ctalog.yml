@@ -7,8 +7,13 @@ on:
     paths:
       - "scans/**"
       - "scripts/generate_catalog.py"
+      - ".github/workflows/update-catalog.yml"
 
   workflow_dispatch:
+
+concurrency:
+  group: update-catalog-main
+  cancel-in-progress: false
 
 permissions:
   contents: write
@@ -28,9 +33,16 @@ jobs:
         with:
           python-version: "3.x"
 
+      - name: Update branch before generating catalog
+        run: |
+          git fetch origin main
+          git rebase origin/main
+
       - name: Generate catalog.json
         run: |
           python scripts/generate_catalog.py
+          echo "Generated catalog:"
+          cat catalog.json
 
       - name: Commit catalog.json
         run: |
@@ -41,7 +53,8 @@ jobs:
 
           if git diff --cached --quiet; then
             echo "catalog.json is already up to date."
-          else
-            git commit -m "Automatically update catalog"
-            git push
+            exit 0
           fi
+
+          git commit -m "Automatically update catalog"
+          git push origin HEAD:main

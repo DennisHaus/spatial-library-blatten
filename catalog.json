@@ -14,11 +14,11 @@
       "uploadedAt": "2026-10-02"
     },
     {
-      "id": "scans-blatten-topografie-monate-2025-mai-29-dtm-pointcloud",
-      "name": "2025 Mai 29 Dtm Pointcloud",
-      "filename": "2025_Mai_29_DTM_Pointcloud.copc.laz",
-      "path": "./scans/Blatten Topografie Monate/2025_Mai_29_DTM_Pointcloud.copc.laz",
-      "url": "./scans/Blatten Topografie Monate/2025_Mai_29_DTM_Pointcloud.copc.laz",
+      "id": "scans-blatten-topografie-monate-2025-mai-29-debris",
+      "name": "2025 Mai 29 Debris",
+      "filename": "2025_Mai_29_Debris.copc.laz",
+      "path": "./scans/Blatten Topografie Monate/2025_Mai_29_Debris.copc.laz",
+      "url": "./scans/Blatten Topografie Monate/2025_Mai_29_Debris.copc.laz",
       "format": "copc",
       "sizeBytes": 64572854,
       "pointCount": null,

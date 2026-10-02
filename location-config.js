@@ -10,7 +10,7 @@ window.LOCATION_CONFIG = {
   brandTitle: `
     SPATIAL<br>
     LIBRARY<br>
-    BLATTEN 1
+    BLATTEN 12
   `,
 
   brandSubtitle: `

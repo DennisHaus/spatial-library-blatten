@@ -21,7 +21,6 @@ SUPPORTED_SUFFIXES = (
     ".mov",
 )
 
-
 def normalize_path(value):
     value = str(value or "").replace("\\", "/")
 

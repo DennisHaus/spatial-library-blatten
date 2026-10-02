@@ -1,0 +1,149 @@
+{
+  "version": 1,
+  "scans": [
+    {
+      "id": "scans-brinzauls-years-2020-brienzauls",
+      "name": "2020 Brienzauls",
+      "filename": "2020 Brienzauls.copc.laz",
+      "path": "./scans/Brinzauls Years/2020 Brienzauls.copc.laz",
+      "url": "./scans/Brinzauls Years/2020 Brienzauls.copc.laz",
+      "format": "copc",
+      "sizeBytes": 100780397,
+      "pointCount": null,
+      "crs": null,
+      "uploadedAt": "2026-09-29"
+    },
+    {
+      "id": "scans-brinzauls-years-2021-brienzauls",
+      "name": "2021 Brienzauls",
+      "filename": "2021 Brienzauls.copc.laz",
+      "path": "./scans/Brinzauls Years/2021 Brienzauls.copc.laz",
+      "url": "./scans/Brinzauls Years/2021 Brienzauls.copc.laz",
+      "format": "copc",
+      "sizeBytes": 74694099,
+      "pointCount": null,
+      "crs": null,
+      "uploadedAt": "2026-09-29"
+    },
+    {
+      "id": "scans-brinzauls-years-2023-brienzauls",
+      "name": "2023 Brienzauls",
+      "filename": "2023 Brienzauls.copc.laz",
+      "path": "./scans/Brinzauls Years/2023 Brienzauls.copc.laz",
+      "url": "./scans/Brinzauls Years/2023 Brienzauls.copc.laz",
+      "format": "copc",
+      "sizeBytes": 83490243,
+      "pointCount": null,
+      "crs": null,
+      "uploadedAt": "2026-09-29"
+    },
+    {
+      "id": "scans-brinzauls-years-2025-brienzauls",
+      "name": "2025 Brienzauls",
+      "filename": "2025 Brienzauls.copc.laz",
+      "path": "./scans/Brinzauls Years/2025 Brienzauls.copc.laz",
+      "url": "./scans/Brinzauls Years/2025 Brienzauls.copc.laz",
+      "format": "copc",
+      "sizeBytes": 86183159,
+      "pointCount": null,
+      "crs": null,
+      "uploadedAt": "2026-09-29"
+    },
+    {
+      "id": "scans-brinzauls-years-2058-brienzauls",
+      "name": "2058 Brienzauls",
+      "filename": "2058_Brienzauls.copc.laz",
+      "path": "./scans/Brinzauls Years/2058_Brienzauls.copc.laz",
+      "url": "./scans/Brinzauls Years/2058_Brienzauls.copc.laz",
+      "format": "copc",
+      "sizeBytes": 101197035,
+      "pointCount": null,
+      "crs": null,
+      "uploadedAt": "2026-09-30"
+    },
+    {
+      "id": "scans-stallikon-test-stallikon-15mio",
+      "name": "Stallikon 15mio",
+      "filename": "stallikon_15mio.copc.laz",
+      "path": "./scans/Stallikon Test/stallikon_15mio.copc.laz",
+      "url": "./scans/Stallikon Test/stallikon_15mio.copc.laz",
+      "format": "copc",
+      "sizeBytes": 77992273,
+      "pointCount": null,
+      "crs": null,
+      "uploadedAt": "2026-09-28"
+    },
+    {
+      "id": "scans-stallikon-test-stallikon-5mio-edit",
+      "name": "Stallikon 5mio Edit",
+      "filename": "stallikon_5mio_edit.copc.laz",
+      "path": "./scans/Stallikon Test/stallikon_5mio_edit.copc.laz",
+      "url": "./scans/Stallikon Test/stallikon_5mio_edit.copc.laz",
+      "format": "copc",
+      "sizeBytes": 31602374,
+      "pointCount": null,
+      "crs": null,
+      "uploadedAt": "2026-09-28"
+    },
+    {
+      "id": "scans-studentgroup1-bildschirmaufnahme-2026-05-19-um-18-28-45",
+      "name": "Bildschirmaufnahme 2026 05 19 Um 18.28.45",
+      "filename": "Bildschirmaufnahme 2026-05-19 um 18.28.45.mp4",
+      "path": "./scans/StudentGroup1/Bildschirmaufnahme 2026-05-19 um 18.28.45.mp4",
+      "url": "./scans/StudentGroup1/Bildschirmaufnahme 2026-05-19 um 18.28.45.mp4",
+      "format": "mp4",
+      "sizeBytes": 63653801,
+      "pointCount": null,
+      "crs": null,
+      "uploadedAt": "2026-10-02"
+    },
+    {
+      "id": "scans-studentgroup1-brinzauls-under-landslide",
+      "name": "Brinzauls Under Landslide",
+      "filename": "Brinzauls under Landslide.png",
+      "path": "./scans/StudentGroup1/Brinzauls under Landslide.png",
+      "url": "./scans/StudentGroup1/Brinzauls under Landslide.png",
+      "format": "png",
+      "sizeBytes": 1577842,
+      "pointCount": null,
+      "crs": null,
+      "uploadedAt": "2026-10-01"
+    },
+    {
+      "id": "scans-studentgroup1-skizzen",
+      "name": "Skizzen",
+      "filename": "Skizzen.png",
+      "path": "./scans/StudentGroup1/Skizzen.png",
+      "url": "./scans/StudentGroup1/Skizzen.png",
+      "format": "png",
+      "sizeBytes": 1963387,
+      "pointCount": null,
+      "crs": null,
+      "uploadedAt": "2026-10-01"
+    },
+    {
+      "id": "scans-studentgroup1-stallikon-15mio",
+      "name": "Stallikon 15mio",
+      "filename": "stallikon_15mio.copc.laz",
+      "path": "./scans/StudentGroup1/stallikon_15mio.copc.laz",
+      "url": "./scans/StudentGroup1/stallikon_15mio.copc.laz",
+      "format": "copc",
+      "sizeBytes": 77992273,
+      "pointCount": null,
+      "crs": null,
+      "uploadedAt": "2026-09-30"
+    },
+    {
+      "id": "scans-studentgroup1-stallikon-5mio-edit",
+      "name": "Stallikon 5mio Edit",
+      "filename": "stallikon_5mio_edit.copc.laz",
+      "path": "./scans/StudentGroup1/stallikon_5mio_edit.copc.laz",
+      "url": "./scans/StudentGroup1/stallikon_5mio_edit.copc.laz",
+      "format": "copc",
+      "sizeBytes": 31602374,
+      "pointCount": null,
+      "crs": null,
+      "uploadedAt": "2026-10-01"
+    }
+  ]
+}

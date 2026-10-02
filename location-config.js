@@ -1,8 +1,8 @@
 window.LOCATION_CONFIG = {
-  pageTitle: "Spatial Library Brinzauls",
+  pageTitle: "Spatial Library Blatten",
 
   metaDescription:
-    "Cloud optimized point cloud viewer for Brienz/Brinzauls scans.",
+    "Cloud optimized point cloud viewer for Blatten scans.",
 
   brandEyebrow:
     "© ETH ZURICH",
@@ -15,8 +15,8 @@ window.LOCATION_CONFIG = {
 
   brandSubtitle: `
     copc viewer & point cloud model interface | for collecting, storing and
-    visualizing spatial recordings and spatial visions of Brienz/Brinzauls
-    during the Seminarweek 2026 |
+    visualizing spatial recordings and spatial visions of Blatten, Lötschental VS
+    during the Spring Semester 2026 |
     beta version
     <br><br>
     developed at Professur Voser, Institute for Landscape and Urban Studies,
@@ -32,7 +32,7 @@ window.LOCATION_CONFIG = {
   `,
 
   uploadUrl:
-    "https://github.com/DennisHaus/pointcloud_viewer/upload/main/scans",
+    "https://github.com/DennisHaus/spatial-library-blatten/upload/main/scans",
 
   readmeTitle: "Spatial Library - Read Me",
 

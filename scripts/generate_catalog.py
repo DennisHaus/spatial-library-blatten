@@ -9,7 +9,17 @@ ROOT = Path(__file__).resolve().parents[1]
 SCANS_DIR = ROOT / "scans"
 CATALOG_FILE = ROOT / "catalog.json"
 
-COPC_SUFFIX = ".copc.laz"
+
+SUPPORTED_SUFFIXES = (
+    ".copc.laz",
+    ".laz",
+    ".las",
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".mp4",
+    ".mov",
+)
 
 
 def normalize_path(value):
@@ -21,12 +31,60 @@ def normalize_path(value):
     return value
 
 
+def get_format(filename):
+    lower_name = filename.lower()
+
+    if lower_name.endswith(".png"):
+        return "png"
+
+    if (
+        lower_name.endswith(".jpg") or
+        lower_name.endswith(".jpeg")
+    ):
+        return "jpg"
+
+    if lower_name.endswith(".mp4"):
+        return "mp4"
+
+    if lower_name.endswith(".mov"):
+                return "mov"
+
+    if lower_name.endswith(".copc.laz"):
+        return "copc"
+
+    if lower_name.endswith(".laz"):
+        return "laz"
+
+    if lower_name.endswith(".las"):
+        return "las"
+
+    return "unknown"
+
+
+def remove_known_suffix(filename):
+    lower_name = filename.lower()
+
+    for suffix in (
+        ".copc.laz",
+        ".jpeg",
+        ".jpg",
+        ".png",
+        ".laz",
+        ".las",
+        ".mp4",
+        ".mov",
+    ):
+        if lower_name.endswith(suffix):
+            return filename[
+                :len(filename) - len(suffix)
+            ]
+
+    return filename
+
+
 def slugify(value):
-    value = re.sub(
-        r"\.copc\.laz$",
-        "",
-        value,
-        flags=re.IGNORECASE
+    value = remove_known_suffix(
+        str(value or "")
     )
 
     value = re.sub(
@@ -35,15 +93,15 @@ def slugify(value):
         value
     )
 
-    return value.strip("-").lower() or "scan"
+    return (
+        value.strip("-").lower()
+        or "scan"
+    )
 
 
 def human_name(filename):
-    base = re.sub(
-        r"\.copc\.laz$",
-        "",
-        filename,
-        flags=re.IGNORECASE
+    base = remove_known_suffix(
+        filename
     )
 
     base = re.sub(
@@ -97,60 +155,96 @@ def load_existing_catalog():
         ) as file:
             data = json.load(file)
 
-        scans = data.get("scans", [])
+        scans = data.get(
+            "scans",
+            []
+        )
 
         return {
-            normalize_path(scan.get("path")): scan
+            normalize_path(
+                scan.get("path")
+            ): scan
             for scan in scans
             if scan.get("path")
         }
 
-    except Exception:
+    except Exception as error:
+        print(
+            "Could not read existing catalog:",
+            error
+        )
+
         return {}
+
+
+def is_supported_file(file):
+    if not file.is_file():
+        return False
+
+    filename = file.name.lower()
+
+    return filename.endswith(
+        SUPPORTED_SUFFIXES
+    )
 
 
 def create_catalog():
     existing = load_existing_catalog()
+
     scans = []
 
     if not SCANS_DIR.exists():
-        print("The scans folder does not exist.")
+        print(
+            "The scans folder does not exist."
+        )
+
         return
 
     files = sorted(
         file
         for file in SCANS_DIR.rglob("*")
-        if (
-            file.is_file()
-            and file.name.lower().endswith(COPC_SUFFIX)
-        )
+        if is_supported_file(file)
+    )
+
+    print(
+        "Supported files found:",
+        len(files)
     )
 
     for file in files:
-        relative_path = file.relative_to(ROOT).as_posix()
-        catalog_path = "./" + relative_path
+        relative_path = (
+            file.relative_to(ROOT)
+            .as_posix()
+        )
+
+        catalog_path = (
+            "./" + relative_path
+        )
 
         previous = existing.get(
-            normalize_path(catalog_path),
+            normalize_path(
+                catalog_path
+            ),
             {}
         )
 
-        relative_without_suffix = re.sub(
-            r"\.copc\.laz$",
-            "",
-            relative_path,
-            flags=re.IGNORECASE
+        file_format = get_format(
+            file.name
         )
 
         scan = {
             "id": previous.get(
                 "id",
-                slugify(relative_without_suffix)
+                slugify(
+                    relative_path
+                )
             ),
 
             "name": previous.get(
                 "name",
-                human_name(file.name)
+                human_name(
+                    file.name
+                )
             ),
 
             "filename": file.name,
@@ -159,13 +253,9 @@ def create_catalog():
 
             "url": catalog_path,
 
-            "format": "copc",
+            "format": file_format,
 
             "sizeBytes": file.stat().st_size,
-
-            
-            #  Keep manually entered metadata if it already exists.
-            #  New files get null values for these fields.
 
             "pointCount": previous.get(
                 "pointCount",
@@ -179,11 +269,19 @@ def create_catalog():
 
             "uploadedAt": previous.get(
                 "uploadedAt",
-                get_git_date(relative_path)
+                get_git_date(
+                    relative_path
+                )
             )
         }
 
         scans.append(scan)
+
+        print(
+            "Added:",
+            relative_path,
+            "(" + file_format + ")"
+        )
 
     catalog = {
         "version": 1,
@@ -206,7 +304,7 @@ def create_catalog():
     print(
         "Generated catalog.json with "
         + str(len(scans))
-        + " scan(s)."
+        + " supported file(s)."
     )
 
 

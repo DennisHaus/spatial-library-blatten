@@ -12,6 +12,18 @@
       "pointCount": null,
       "crs": null,
       "uploadedAt": "2026-10-02"
+    },
+    {
+      "id": "scans-blatten-topografie-monate-2025-mai-29-dtm-pointcloud",
+      "name": "2025 Mai 29 Dtm Pointcloud",
+      "filename": "2025_Mai_29_DTM_Pointcloud.copc.laz",
+      "path": "./scans/Blatten Topografie Monate/2025_Mai_29_DTM_Pointcloud.copc.laz",
+      "url": "./scans/Blatten Topografie Monate/2025_Mai_29_DTM_Pointcloud.copc.laz",
+      "format": "copc",
+      "sizeBytes": 64567013,
+      "pointCount": null,
+      "crs": null,
+      "uploadedAt": "2026-10-02"
     }
   ]
 }

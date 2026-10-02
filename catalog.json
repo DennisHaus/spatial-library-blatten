@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "scans": [
+    {
+      "id": "scans-blatten-topografie-monate-2020-brienzauls",
+      "name": "2020 Brienzauls",
+      "filename": "2020 Brienzauls.copc.laz",
+      "path": "./scans/Blatten Topografie Monate/2020 Brienzauls.copc.laz",
+      "url": "./scans/Blatten Topografie Monate/2020 Brienzauls.copc.laz",
+      "format": "copc",
+      "sizeBytes": 100780397,
+      "pointCount": null,
+      "crs": null,
+      "uploadedAt": "2026-10-01"
+    },
+    {
+      "id": "scans-photogrammetrien-stallikon-15mio",
+      "name": "Stallikon 15mio",
+      "filename": "stallikon_15mio.copc.laz",
+      "path": "./scans/Photogrammetrien/stallikon_15mio.copc.laz",
+      "url": "./scans/Photogrammetrien/stallikon_15mio.copc.laz",
+      "format": "copc",
+      "sizeBytes": 77992273,
+      "pointCount": null,
+      "crs": null,
+      "uploadedAt": "2026-10-01"
+    },
+    {
+      "id": "scans-photogrammetrien-stallikon-5mio-edit",
+      "name": "Stallikon 5mio Edit",
+      "filename": "stallikon_5mio_edit.copc.laz",
+      "path": "./scans/Photogrammetrien/stallikon_5mio_edit.copc.laz",
+      "url": "./scans/Photogrammetrien/stallikon_5mio_edit.copc.laz",
+      "format": "copc",
+      "sizeBytes": 31602374,
+      "pointCount": null,
+      "crs": null,
+      "uploadedAt": "2026-10-01"
+    }
+  ]
+}

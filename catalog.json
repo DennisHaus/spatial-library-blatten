@@ -24,6 +24,18 @@
       "pointCount": null,
       "crs": null,
       "uploadedAt": "2026-10-02"
+    },
+    {
+      "id": "scans-blatten-topografie-monate-2026-april-24-debris",
+      "name": "2026 April 24 Debris",
+      "filename": "2026_April_24_Debris.copc.laz",
+      "path": "./scans/Blatten Topografie Monate/2026_April_24_Debris.copc.laz",
+      "url": "./scans/Blatten Topografie Monate/2026_April_24_Debris.copc.laz",
+      "format": "copc",
+      "sizeBytes": 74328710,
+      "pointCount": null,
+      "crs": null,
+      "uploadedAt": "2026-10-02"
     }
   ]
 }

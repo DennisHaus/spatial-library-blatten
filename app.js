@@ -111,46 +111,29 @@ function initialize() {
   bindNavigationKeyboard();
 
   loadCatalog()
-    .then(
-      function () {
-        renderLibrary();
+    .then(function () {
+      renderLibrary();
 
-        if (
-          state.catalog.length >
-          0
-        ) {
-          return loadScan(
-            state.catalog[0]
-          );
-        }
+      const firstScan = state.catalog?.[0];
 
-        setViewerStatus(
-          "No scans available",
-          "idle"
-        );
-
-        setStatus(
-          "No scans found in catalog.json",
-          "idle"
-        );
-
-        return null;
+      if (firstScan) {
+        return loadScan(firstScan);
       }
-    )
-    .catch(
-      function (error) {
-        console.error(
-          "Application startup failed:",
-          error
-        );
 
-        setStatus(
-          "Application startup failed.",
-          "error"
-        );
-      }
-    );
+      setViewerStatus("No scans available", "idle");
+      setStatus("No scans found in catalog.json", "idle");
+
+      return null;
+    })
+    .catch(function (error) {
+      console.error("Application startup failed:", error);
+      setStatus("Application startup failed.", "error");
+    });
 }
+
+console.log("state:", state);
+console.log("catalog:", state?.catalog);
+console.log("first catalog item:", state?.catalog?.[0]);
 
 
 /* -------------------------------------------------------------------------- */

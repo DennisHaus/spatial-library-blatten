@@ -36,6 +36,18 @@
       "pointCount": null,
       "crs": null,
       "uploadedAt": "2026-10-02"
+    },
+    {
+      "id": "scans-blatten-topografie-monate-werdhoelzli",
+      "name": "Werdhoelzli",
+      "filename": "werdhoelzli.copc.laz",
+      "path": "./scans/Blatten Topografie Monate/werdhoelzli.copc.laz",
+      "url": "./scans/Blatten Topografie Monate/werdhoelzli.copc.laz",
+      "format": "copc",
+      "sizeBytes": 66732294,
+      "pointCount": null,
+      "crs": null,
+      "uploadedAt": "2026-10-05"
     }
   ]
 }

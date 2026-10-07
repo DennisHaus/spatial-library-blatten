@@ -16,20 +16,32 @@ window.LOCATION_CONFIG = {
   brandSubtitle: `
     copc viewer & point cloud model interface | for collecting, storing and
     visualizing spatial recordings and spatial visions of Blatten, Lötschental VS
-    during the Spring Semester 2026 |
+    during MScLa Design Studio, Spring Semester 2026 |
     beta version
     <br><br>
-    developed at Professur Voser, Institute for Landscape and Urban Studies,
-    ETH Zürich | assisted by AI gpt 5.6
+    See all Places <a
+      class="subtitle-link"
+      href="https://dennishaus.github.io/overview"
+      target="_blank"
+      rel="noopener"
+    >
+      here
+    </a> |
+    Viewer inspired by
     <a
       class="subtitle-link"
       href="https://kyotodesignlab.github.io/campus-garden"
       target="_blank"
       rel="noopener"
     >
-      inspired by Campus Garden XR, Kyoto Design Lab
+      Campus Garden XR
     </a>
+    , Kyoto Design Lab
   `,
+
+  startView: null,
+
+  navigationMode: "fly",
 
   uploadUrl:
     "https://github.com/DennisHaus/spatial-library-blatten/upload/main/scans",

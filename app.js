@@ -31,6 +31,35 @@ var CONFIG = {
   navigationSpeed:
     0.35,
 
+  /*
+    Mouse navigation: "orbit", "fly" or "walk" when the viewer opens
+    (location-config.js can set navigationMode too). The last mode a
+    visitor chose is remembered in their browser.
+  */
+  navigationMode:
+    "fly",
+
+  /* How far the view turns per pixel of mouse drag */
+  lookSensitivity:
+    0.004,
+
+  /* Smoothing in seconds: higher = softer, lower = more direct */
+  lookSmoothing:
+    0.06,
+
+  zoomSmoothing:
+    0.12,
+
+  glideTime:
+    0.25,
+
+  /*
+    With a section active, the exported PNG is cropped to the
+    visible points (plus a small margin). false = full viewer.
+  */
+  cropExportToSection:
+    true,
+
   screenshotScale:
     5,
 
@@ -40,14 +69,18 @@ var CONFIG = {
   useRawBaseForPaths:
     LOCATION_CONFIG.useRawBaseForPaths === true,
 
+  /*
+    Share of the viewer the model fills when zooming to it
+    (0.9 = 10% margin around the model).
+  */
   fitFactor:
-    0.95,
+    0.9,
 
+  /*
+    1 = exact fit. Below 1 moves closer, above 1 farther away.
+  */
   fitDistanceMultiplier:
-    0.8,
-
-  fitVerticalOffset:
-    -0.4,
+    1,
 
   rawBaseUrl:
     LOCATION_CONFIG.rawBaseUrl ||
@@ -477,10 +510,30 @@ function updatePanelLayout() {
     libraryExpanded &&
     inspectorExpanded
   ) {
+    /*
+      The library takes only the height its scans need, the
+      inspector gets the rest. A long library keeps at least 35%
+      and scrolls.
+    */
+    var libraryNeed =
+      measureLibraryHeight(
+        libraryPanel,
+        libraryHeaderHeight
+      );
+
+    var inspectorNeed =
+      measureInspectorHeight(
+        inspectorToggleHeight
+      );
+
     libraryHeight =
-      Math.floor(
-        panelAreaHeight /
-        2
+      Math.min(
+        libraryNeed,
+        Math.max(
+          panelAreaHeight - inspectorNeed,
+          Math.floor(panelAreaHeight * 0.35)
+        ),
+        panelAreaHeight - inspectorToggleHeight
       );
 
     inspectorHeight =
@@ -704,15 +757,7 @@ function initializeViewer() {
       }
     }
 
-    if (
-      viewer.orbitControls &&
-      typeof viewer.setControls ===
-      "function"
-    ) {
-      viewer.setControls(
-        viewer.orbitControls
-      );
-    }
+    installNavigation();
 
     window.addEventListener(
       "resize",
@@ -3351,11 +3396,36 @@ function loadScan(
         window.setTimeout(
           function () {
             if (
-              state.activeCloud ===
+              state.activeCloud !==
               pointcloud
             ) {
-              fitActiveScan();
+              return;
             }
+
+            /*
+              The first scan opens at the start view from
+              location-config.js, if one is set.
+            */
+            var useStartView =
+              !state.startViewApplied;
+
+            state.startViewApplied =
+              true;
+
+            if (
+              useStartView &&
+              applyStartView()
+            ) {
+              setStatus(
+                scan.name +
+                " loaded",
+                "idle"
+              );
+
+              return;
+            }
+
+            fitActiveScan();
           },
           500
         );
@@ -4504,23 +4574,52 @@ function getSectionRange() {
     };
   }
 
-  var axisElement =
-    getElement(
-      "sectionAxis"
-    );
+  /*
+    Vertical section: the range along the section direction,
+    which can be rotated around Z.
+  */
+  var angle =
+    getSectionAngle();
 
-  var axis =
-    axisElement &&
-    axisElement.value
-      ? axisElement.value
-      : "x";
+  var nx =
+    Math.cos(angle);
+
+  var ny =
+    Math.sin(angle);
+
+  var b =
+    state.activeBounds;
+
+  var projections = [
+    b.min.x * nx + b.min.y * ny,
+    b.max.x * nx + b.min.y * ny,
+    b.min.x * nx + b.max.y * ny,
+    b.max.x * nx + b.max.y * ny
+  ];
 
   return {
     min:
-      state.activeBounds.min[axis],
+      Math.min.apply(null, projections),
+
     max:
-      state.activeBounds.max[axis]
+      Math.max.apply(null, projections)
   };
+}
+
+/* Section direction in radians: 0° cuts across X, 90° across Y */
+function getSectionAngle() {
+  var element =
+    getElement(
+      "sectionAngle"
+    );
+
+  var degrees =
+    element
+      ? Number(element.value)
+      : 0;
+
+  return (isFinite(degrees) ? degrees : 0) *
+    Math.PI / 180;
 }
 
 function updateSectionControls() {
@@ -4650,6 +4749,13 @@ function updateSectionControls() {
 
   thicknessElement.max =
     length;
+
+  thicknessElement.step =
+    Math.max(
+      length /
+      1000,
+      0.000001
+    );
 
   thicknessElement.value =
     thickness.toFixed(
@@ -4863,6 +4969,70 @@ function applySection() {
       0.001
     )
   );
+
+  /*
+    Vertical section: a thin slab across the whole scan, turned
+    around Z by the chosen direction.
+  */
+  if (
+    mode ===
+    "vertical"
+  ) {
+    var angle =
+      getSectionAngle();
+
+    var nx =
+      Math.cos(angle);
+
+    var ny =
+      Math.sin(angle);
+
+    var b =
+      state.activeBounds;
+
+    var cx =
+      (b.min.x + b.max.x) / 2;
+
+    var cy =
+      (b.min.y + b.max.y) / 2;
+
+    var shift =
+      safePosition -
+      (cx * nx + cy * ny);
+
+    var span =
+      Math.hypot(
+        b.max.x - b.min.x,
+        b.max.y - b.min.y
+      ) * 1.1 + 0.01;
+
+    volume.position.set(
+      cx + nx * shift,
+      cy + ny * shift,
+      (b.min.z + b.max.z) / 2
+    );
+
+    volume.scale.set(
+      thickness,
+      span,
+      Math.max(b.max.z - b.min.z, 0.001) * 1.02
+    );
+
+    volume.rotation.set(
+      0,
+      0,
+      angle
+    );
+
+    if (
+      typeof volume.updateMatrixWorld ===
+      "function"
+    ) {
+      volume.updateMatrixWorld(
+        true
+      );
+    }
+  }
 
   volume.clip =
     true;
@@ -5121,6 +5291,18 @@ function getNavigationKey(
   }
 
   if (
+    code === "keye"
+  ) {
+    return "e";
+  }
+
+  if (
+    code === "keyc"
+  ) {
+    return "c";
+  }
+
+  if (
     code === "arrowup"
   ) {
     return "arrowup";
@@ -5312,6 +5494,26 @@ function moveViewerWithKeyboard(
   }
 
   direction.normalize();
+
+  /*
+    Walk mode: move level, whatever the camera looks at.
+  */
+  if (
+    navigation.mode ===
+    "walk"
+  ) {
+    var level =
+      directionFromYawPitch(
+        view.yaw,
+        0
+      );
+
+    direction.set(
+      level.x,
+      level.y,
+      0
+    );
+  }
 
   var right =
     direction.clone();
@@ -5570,6 +5772,10 @@ function moveViewerWithKeyboard(
   view.position.add(
     displacement
   );
+
+  navigationCameraMoved(
+    displacement
+  );
 }
 
 function clearNavigationKeys() {
@@ -5631,6 +5837,17 @@ function navigationAnimationLoop(
   moveViewerWithKeyboard(
     deltaSeconds
   );
+
+  if (
+    navigation.controls &&
+    performance.now() -
+    navigation.lastUpdate >
+    250
+  ) {
+    updateNavigation(
+      deltaSeconds
+    );
+  }
 
   window.requestAnimationFrame(
     navigationAnimationLoop
@@ -6282,6 +6499,21 @@ function getPointCloudWorldBounds(
   }
 
   /*
+    The tight box hugs the actual points. The regular box is the
+    octree cube, which is larger and puts the center off the model.
+  */
+  var tightBounds =
+    getTightWorldBounds(
+      pointcloud
+    );
+
+  if (
+    tightBounds
+  ) {
+    return tightBounds;
+  }
+
+  /*
     First try Potree's own world-bounds method.
   */
   if (
@@ -6416,6 +6648,61 @@ function getPointCloudWorldBounds(
 }
 
 
+function getTightWorldBounds(
+  pointcloud
+) {
+  var geometry =
+    pointcloud.pcoGeometry;
+
+  var box =
+    geometry &&
+    geometry.tightBoundingBox;
+
+  if (
+    !box ||
+    typeof box.clone !==
+    "function" ||
+    (
+      typeof box.isEmpty ===
+      "function" &&
+      box.isEmpty()
+    )
+  ) {
+    return null;
+  }
+
+  try {
+    if (
+      typeof pointcloud.updateMatrixWorld ===
+      "function"
+    ) {
+      pointcloud.updateMatrixWorld(
+        true
+      );
+    }
+
+    var worldBox =
+      box.clone();
+
+    if (
+      pointcloud.matrixWorld
+    ) {
+      worldBox.applyMatrix4(
+        pointcloud.matrixWorld
+      );
+    }
+
+    return readPointCloudBox(
+      worldBox
+    );
+  } catch (
+    error
+  ) {
+    return null;
+  }
+}
+
+
 function getCombinedPointCloudBounds(
   pointclouds
 ) {
@@ -6527,6 +6814,10 @@ function setOrbitCenter(
   ) {
     return;
   }
+
+  setNavigationPivot(
+    center
+  );
 
   var view =
     viewer.scene.view;
@@ -6690,6 +6981,12 @@ function getViewDirection(
   return direction;
 }
 
+/*
+  Frames the bounds exactly: the box center lands in the middle of
+  the viewer and the camera keeps its current viewing direction.
+  The distance is computed from all 8 box corners, so tall, flat or
+  long scans are framed tightly instead of using a loose sphere.
+*/
 function fitBounds(
   bounds,
   fitFactor,
@@ -6717,459 +7014,277 @@ function fitBounds(
     return false;
   }
 
-  /*
-    Use Potree's own Vector3 class.
-  */
-  var min =
-    view.position.clone();
-
-  min.set(
-    Number(
-      bounds.min.x
-    ),
-    Number(
-      bounds.min.y
-    ),
-    Number(
-      bounds.min.z
-    )
-  );
-
-  var max =
-    view.position.clone();
-
-  max.set(
-    Number(
-      bounds.max.x
-    ),
-    Number(
-      bounds.max.y
-    ),
-    Number(
-      bounds.max.z
-    )
-  );
+  var minX = Number(bounds.min.x);
+  var minY = Number(bounds.min.y);
+  var minZ = Number(bounds.min.z);
+  var maxX = Number(bounds.max.x);
+  var maxY = Number(bounds.max.y);
+  var maxZ = Number(bounds.max.z);
 
   if (
-    !isFinite(min.x) ||
-    !isFinite(min.y) ||
-    !isFinite(min.z) ||
-    !isFinite(max.x) ||
-    !isFinite(max.y) ||
-    !isFinite(max.z)
+    ![minX, minY, minZ, maxX, maxY, maxZ].every(isFinite)
   ) {
     return false;
   }
 
+  var center = {
+    x: (minX + maxX) / 2,
+    y: (minY + maxY) / 2,
+    z: (minZ + maxZ) / 2
+  };
+
   /*
-    Actual center of the scan bounds.
+    Camera axes. Z is up.
   */
-  var center =
-    min.clone()
-      .add(
-        max
+  var currentDirection =
+    getViewDirection(
+      view,
+      null
+    );
+
+  var forward =
+    normalize3(
+      currentDirection
+        ? {
+          x: currentDirection.x,
+          y: currentDirection.y,
+          z: currentDirection.z
+        }
+        : {
+          x: 0,
+          y: -1,
+          z: -0.5
+        }
+    );
+
+  var right =
+    cross3(
+      forward,
+      { x: 0, y: 0, z: 1 }
+    );
+
+  if (
+    length3(right) < 0.000001
+  ) {
+    right = { x: 1, y: 0, z: 0 };
+  }
+
+  right =
+    normalize3(right);
+
+  var up =
+    normalize3(
+      cross3(
+        right,
+        forward
       )
-      .multiplyScalar(
-        0.5
-      );
-
-  /*
-    Size of the bounds.
-  */
-  var size =
-    max.clone()
-      .sub(
-        min
-      );
-
-  var width =
-    Math.abs(
-      size.x
     );
 
-  var height =
-    Math.abs(
-      size.y
-    );
-
-  var depth =
-    Math.abs(
-      size.z
-    );
-
-  if (
-    !isFinite(width) ||
-    width <= 0
-  ) {
-    width =
-      1;
-  }
-
-  if (
-    !isFinite(height) ||
-    height <= 0
-  ) {
-    height =
-      1;
-  }
-
-  if (
-    !isFinite(depth) ||
-    depth <= 0
-  ) {
-    depth =
-      1;
-  }
-
   /*
-    Keep the current viewing direction.
-  */
-  var direction =
-    null;
-
-  if (
-    view.direction &&
-    typeof view.direction.clone ===
-    "function"
-  ) {
-    direction =
-      view.direction.clone();
-  }
-
-  if (
-    !direction &&
-    typeof view.getDirection ===
-    "function"
-  ) {
-    direction =
-      view.getDirection();
-
-    if (
-      direction &&
-      typeof direction.clone ===
-      "function"
-    ) {
-      direction =
-        direction.clone();
-    }
-  }
-
-  /*
-    Fallback direction: from camera to scan center.
-  */
-  if (
-    !direction &&
-    typeof center.clone ===
-    "function"
-  ) {
-    direction =
-      center.clone()
-        .sub(
-          view.position
-        );
-  }
-
-  /*
-    Final fallback direction.
-  */
-  if (
-    !direction ||
-    typeof direction.normalize !==
-    "function"
-  ) {
-    direction =
-      view.position.clone();
-
-    direction.set(
-      0,
-      -1,
-      -0.5
-    );
-  }
-
-  if (
-    typeof direction.lengthSq ===
-    "function" &&
-    direction.lengthSq() <
-    0.000001
-  ) {
-    direction.set(
-      0,
-      -1,
-      -0.5
-    );
-  }
-
-  direction.normalize();
-
-  /*
-    Camera field of view.
+    Field of view and aspect ratio of the canvas.
   */
   var fov =
-    50;
-
-  if (
-    typeof viewer.getFOV ===
-    "function"
-  ) {
-    fov =
-      Number(
-        viewer.getFOV()
-      );
-  }
+    typeof viewer.getFOV === "function"
+      ? Number(viewer.getFOV())
+      : 60;
 
   if (
     !isFinite(fov) ||
     fov <= 0
   ) {
-    fov =
-      50;
+    fov = 60;
   }
 
-  var verticalFov =
-    fov *
-    Math.PI /
-    180;
-
-  /*
-    Renderer aspect ratio.
-  */
-  var aspect =
-    1;
-
-  if (
+  var canvas =
     viewer.renderer &&
-    viewer.renderer.domElement
-  ) {
-    var canvas =
-      viewer.renderer.domElement;
+    viewer.renderer.domElement;
 
-    var canvasWidth =
-      canvas.clientWidth ||
-      canvas.width ||
-      1;
-
-    var canvasHeight =
-      canvas.clientHeight ||
-      canvas.height ||
-      1;
-
-    aspect =
-      canvasWidth /
-      Math.max(
-        canvasHeight,
-        1
-      );
-  }
+  var aspect =
+    canvas
+      ? (canvas.clientWidth || canvas.width || 1) /
+        Math.max(canvas.clientHeight || canvas.height || 1, 1)
+      : 1;
 
   if (
     !isFinite(aspect) ||
     aspect <= 0
   ) {
-    aspect =
-      1;
+    aspect = 1;
   }
 
-  var horizontalFov =
-    2 *
-    Math.atan(
-      Math.tan(
-        verticalFov /
-        2
-      ) *
-      aspect
+  var tanVertical =
+    Math.tan(
+      fov * Math.PI / 360
     );
 
-  var limitingFov =
-    Math.min(
-      verticalFov,
-      horizontalFov
-    );
+  var tanHorizontal =
+    tanVertical * aspect;
 
   /*
-    Bounding-sphere radius.
+    fitFactor = share of the screen the model may fill (0.9 = 10% margin).
   */
-  var radius =
-    Math.sqrt(
-      width *
-      width +
-      height *
-      height +
-      depth *
-      depth
-    ) /
-    2;
+  var margin =
+    Number(fitFactor);
 
   if (
-    !isFinite(radius) ||
-    radius <= 0
+    !isFinite(margin) ||
+    margin <= 0 ||
+    margin > 1
   ) {
-    radius =
-      1;
+    margin = 0.9;
   }
 
-  /*
-    Fit factor.
+  var distance = 0;
 
-    Larger values move the camera closer.
-    Values such as 0.9, 0.97 and 0.998
-    are all accepted.
-  */
-  var safeFitFactor =
-    Number(
-      fitFactor
-    );
+  var halfWidth = 0;
+
+  [minX, maxX].forEach(function (x) {
+    [minY, maxY].forEach(function (y) {
+      [minZ, maxZ].forEach(function (z) {
+        var p = {
+          x: x - center.x,
+          y: y - center.y,
+          z: z - center.z
+        };
+
+        var screenX = Math.abs(dot3(p, right));
+        var screenY = Math.abs(dot3(p, up));
+        var depth = dot3(p, forward);
+
+        halfWidth = Math.max(
+          halfWidth,
+          screenX / margin,
+          screenY * aspect / margin
+        );
+
+        distance = Math.max(
+          distance,
+          screenX / (tanHorizontal * margin) - depth,
+          screenY / (tanVertical * margin) - depth
+        );
+      });
+    });
+  });
+
+  var multiplier =
+    Number(CONFIG.fitDistanceMultiplier);
 
   if (
-    !isFinite(safeFitFactor) ||
-    safeFitFactor <= 0
+    isFinite(multiplier) &&
+    multiplier > 0
   ) {
-    safeFitFactor =
-      0.9;
+    distance *= multiplier;
   }
 
-  /*
-    Base camera distance.
-  */
-  var baseDistance =
-    radius /
-    Math.sin(
-      limitingFov /
-      2
-    );
-
-  if (
-    !isFinite(baseDistance) ||
-    baseDistance <= 0
-  ) {
-    baseDistance =
-      1;
-  }
-
-  /*
-    Additional distance multiplier.
-
-    1.00 = normal
-    0.85 = closer
-    0.70 = much closer
-    1.20 = farther away
-  */
-  var distanceMultiplier =
-    Number(
-      CONFIG.fitDistanceMultiplier
-    );
-
-  if (
-    !isFinite(distanceMultiplier) ||
-    distanceMultiplier <= 0
-  ) {
-    distanceMultiplier =
-      1;
-  }
-
-  var distance =
-    baseDistance /
-    safeFitFactor;
-
-  distance *=
-    distanceMultiplier;
-
-  /*
-    Prevent an invalid or extremely small distance.
-  */
   var largestSize =
     Math.max(
-      width,
-      height,
-      depth
-    );
-
-  var minimumDistance =
-    Math.max(
-      largestSize *
-      0.001,
-      0.001
+      maxX - minX,
+      maxY - minY,
+      maxZ - minZ
     );
 
   distance =
     Math.max(
       distance,
-      minimumDistance
+      largestSize * 0.01,
+      0.01
     );
 
-  /*
-    Target center used for looking at the model.
+  var target =
+    view.position.clone();
 
-    Z is treated as the vertical axis.
-    Negative values move the target slightly
-    downward, which makes the model appear
-    higher in the viewport.
-  */
-  var targetCenter =
-    center.clone();
-
-  var verticalOffset =
-    Number(
-      CONFIG.fitVerticalOffset
-    );
-
-  if (
-    !isFinite(verticalOffset)
-  ) {
-    verticalOffset =
-      0;
-  }
-
-  targetCenter.z +=
-    depth *
-    verticalOffset;
-
-  /*
-    Position the camera.
-  */
-  var cameraPosition =
-    targetCenter.clone()
-      .sub(
-        direction.clone()
-          .multiplyScalar(
-            distance
-          )
-      );
-
-  view.position.copy(
-    cameraPosition
+  target.set(
+    center.x,
+    center.y,
+    center.z
   );
 
-  /*
-    Look at the adjusted target center.
-  */
+  var position =
+    view.position.clone();
+
+  position.set(
+    center.x - forward.x * distance,
+    center.y - forward.y * distance,
+    center.z - forward.z * distance
+  );
+
+  placeCamera(
+    position,
+    target,
+    halfWidth
+  );
+
+  if (
+    statusMessage
+  ) {
+    setStatus(
+      statusMessage,
+      "idle"
+    );
+  }
+
+  return true;
+}
+
+
+/*
+  Puts the camera at position, looking at target, and makes target
+  the orbit center so orbiting doesn't make the model jump.
+*/
+function placeCamera(
+  position,
+  target,
+  orthoHalfWidth
+) {
+  var view =
+    viewer.scene.view;
+
+  view.position.copy(
+    position
+  );
+
   if (
     typeof view.lookAt ===
     "function"
   ) {
     view.lookAt(
-      targetCenter
+      target
     );
   }
+
+  var distance =
+    position.distanceTo(
+      target
+    );
 
   view.radius =
     distance;
 
+  setOrbitCenter(
+    target
+  );
+
+  navigation.perspectiveRadius =
+    distance;
+
   /*
-    Keep the actual scan center as
-    the orbit rotation center.
+    In orthographic view Potree uses view.radius as half the visible
+    width, so convert the distance into that scale.
   */
   if (
-    typeof setOrbitCenter ===
-    "function"
+    isOrthographic()
   ) {
-    setOrbitCenter(
-      center
-    );
+    view.radius =
+      orthoHalfWidth ||
+      distance *
+      Math.tan(getViewerFov() * Math.PI / 360) *
+      getViewerAspect();
+
+    navigation.orthoTarget =
+      view.radius;
   }
 
   if (
-    viewer.scene &&
     typeof viewer.scene.getActiveCamera ===
     "function"
   ) {
@@ -7184,18 +7299,218 @@ function fitBounds(
       camera.updateProjectionMatrix();
     }
   }
+}
+
+
+function dot3(a, b) {
+  return a.x * b.x + a.y * b.y + a.z * b.z;
+}
+
+function cross3(a, b) {
+  return {
+    x: a.y * b.z - a.z * b.y,
+    y: a.z * b.x - a.x * b.z,
+    z: a.x * b.y - a.y * b.x
+  };
+}
+
+function length3(a) {
+  return Math.sqrt(dot3(a, a));
+}
+
+function normalize3(a) {
+  var length =
+    length3(a) || 1;
+
+  return {
+    x: a.x / length,
+    y: a.y / length,
+    z: a.z / length
+  };
+}
+
+
+/* -------------------------------------------------------------------------- */
+/* START VIEW                                                                 */
+/* -------------------------------------------------------------------------- */
+
+/*
+  Reads startView from location-config.js:
+
+  startView: {
+    position: [x, y, z],
+    target: [x, y, z]
+  }
+*/
+function readVector3(
+  value
+) {
+  if (
+    !value
+  ) {
+    return null;
+  }
+
+  var parts =
+    Array.isArray(value)
+      ? value
+      : typeof value === "string"
+        ? value.split(/[;,\s]+/).filter(Boolean)
+        : [value.x, value.y, value.z];
+
+  var numbers =
+    parts.slice(0, 3).map(Number);
+
+  return numbers.length === 3 &&
+    numbers.every(isFinite)
+    ? numbers
+    : null;
+}
+
+function readStartView() {
+  var startView =
+    LOCATION_CONFIG.startView;
 
   if (
-    statusMessage
+    !startView
   ) {
-    setStatus(
-      statusMessage,
-      "idle"
-    );
+    return null;
   }
+
+  var position =
+    readVector3(startView.position);
+
+  var target =
+    readVector3(startView.target);
+
+  return position && target
+    ? { position: position, target: target }
+    : null;
+}
+
+function applyStartView() {
+  var startView =
+    readStartView();
+
+  if (
+    !startView ||
+    !viewer ||
+    !viewer.scene ||
+    !viewer.scene.view
+  ) {
+    return false;
+  }
+
+  var view =
+    viewer.scene.view;
+
+  var position =
+    view.position.clone();
+
+  position.set(
+    startView.position[0],
+    startView.position[1],
+    startView.position[2]
+  );
+
+  var target =
+    view.position.clone();
+
+  target.set(
+    startView.target[0],
+    startView.target[1],
+    startView.target[2]
+  );
+
+  placeCamera(
+    position,
+    target
+  );
 
   return true;
 }
+
+function getCurrentTarget() {
+  var view =
+    viewer.scene.view;
+
+  if (
+    typeof view.getPivot ===
+    "function"
+  ) {
+    return view.getPivot();
+  }
+
+  var direction =
+    getViewDirection(
+      view,
+      null
+    );
+
+  return view.position.clone()
+    .add(
+      direction.clone()
+        .multiplyScalar(
+          view.radius || 1
+        )
+    );
+}
+
+/*
+  Copies the current camera as a startView block for location-config.js.
+*/
+function copyStartView() {
+  if (
+    !viewer ||
+    !viewer.scene ||
+    !viewer.scene.view
+  ) {
+    return;
+  }
+
+  var round = function (n) {
+    return Math.round(n * 1000) / 1000;
+  };
+
+  var position =
+    viewer.scene.view.position;
+
+  var target =
+    getCurrentTarget();
+
+  var snippet =
+    "  startView: {\n" +
+    "    position: [" + [position.x, position.y, position.z].map(round).join(", ") + "],\n" +
+    "    target: [" + [target.x, target.y, target.z].map(round).join(", ") + "]\n" +
+    "  },";
+
+  console.log(
+    "Start view for location-config.js:\n" +
+    snippet
+  );
+
+  var done = function () {
+    setStatus(
+      "Start view copied. Paste it into location-config.js.",
+      "idle"
+    );
+  };
+
+  if (
+    navigator.clipboard &&
+    navigator.clipboard.writeText
+  ) {
+    navigator.clipboard
+      .writeText(snippet)
+      .then(done)
+      .catch(function () {
+        window.prompt("Copy this into location-config.js:", snippet);
+      });
+  } else {
+    window.prompt("Copy this into location-config.js:", snippet);
+  }
+}
+
 
 function fitUsingPotree(
   cloudsToFit,
@@ -7436,33 +7751,8 @@ function resetView() {
 
 
 function activateOrbitMode() {
-  if (
-    viewer &&
-    viewer.orbitControls &&
-    typeof viewer.setControls ===
-    "function"
-  ) {
-    viewer.setControls(
-      viewer.orbitControls
-    );
-  }
-
-  var button =
-    getElement(
-      "orbitMode"
-    );
-
-  if (
-    button
-  ) {
-    button.classList.add(
-      "active"
-    );
-  }
-
-  setStatus(
-    "Orbit navigation active",
-    "idle"
+  setNavigationMode(
+    "orbit"
   );
 }
 
@@ -8671,8 +8961,8 @@ function exportScreenshot() {
       }
 
       var dataUrl =
-        canvas.toDataURL(
-          "image/png"
+        exportCanvasDataUrl(
+          canvas
         );
 
       restoreViewer();
@@ -8961,6 +9251,62 @@ window.setTimeout(
   );
 
   addEvent(
+    "copyStartView",
+    "click",
+    copyStartView
+  );
+
+  addEvent(
+    "toggleProjection",
+    "click",
+    toggleProjection
+  );
+
+  addEvent(
+    "toggleNavigation",
+    "click",
+    toggleNavigationMode
+  );
+
+  document.addEventListener(
+    "keydown",
+    function (event) {
+      if (
+        (event.key === "o" || event.key === "O" || event.code === "KeyO") &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.altKey &&
+        !event.repeat &&
+        !isTypingInField(event.target)
+      ) {
+        toggleNavigationMode();
+      }
+    }
+  );
+
+  /*
+    Once location-config.js has a startView, the camera button is
+    hidden. Open the site with ?setview at the end of the address
+    to show it again.
+  */
+  var startViewButton =
+    getElement(
+      "copyStartView"
+    );
+
+  if (
+    startViewButton &&
+    readStartView() &&
+    !/[?&]setview\b/.test(window.location.search)
+  ) {
+    startViewButton.classList.add(
+      "hidden"
+    );
+  }
+
+
+
+  addEvent(
     "orbitMode",
     "click",
     activateOrbitMode
@@ -9031,10 +9377,56 @@ window.setTimeout(
   );
 
   addEvent(
-    "sectionAxis",
-    "change",
+    "sectionAngle",
+    "input",
     function () {
-      updateSectionControls();
+      var degrees =
+        Math.round(
+          getSectionAngle() * 180 / Math.PI
+        );
+
+      setText(
+        "sectionAngleValue",
+        degrees + "°"
+      );
+
+      /* Keep the position slider at the same relative place */
+      var positionElement =
+        getElement(
+          "sectionPosition"
+        );
+
+      var range =
+        getSectionRange();
+
+      if (
+        positionElement &&
+        range
+      ) {
+        var oldMin = Number(positionElement.min);
+        var oldMax = Number(positionElement.max);
+        var oldValue = Number(positionElement.value);
+
+        var fraction =
+          oldMax > oldMin
+            ? (oldValue - oldMin) / (oldMax - oldMin)
+            : 0.5;
+
+        var length =
+          Math.max(range.max - range.min, 0.001);
+
+        positionElement.min = range.min;
+        positionElement.max = range.max;
+        positionElement.step = Math.max(length / 1000, 0.000001);
+        positionElement.value = range.min + clamp(fraction, 0, 1) * length;
+
+        setText(
+          "sectionPositionValue",
+          formatCoordinate(
+            Number(positionElement.value)
+          )
+        );
+      }
 
       if (
         state.sectionVolume
@@ -9366,3 +9758,1486 @@ function formatCoordinate(
 
 
 bindDescriptionDialog();
+
+
+/* -------------------------------------------------------------------------- */
+/* SMOOTH NAVIGATION                                                          */
+/* -------------------------------------------------------------------------- */
+
+/*
+  Replaces Potree's mouse controls with three predictable modes:
+
+  Orbit  rotate around a fixed point (the model center after zooming,
+         or any point you double-click). The point only changes when
+         you zoom to a model or double-click, so it never wanders.
+  Fly    first-person, like a game: drag to look, WASD to move in the
+         direction you look, E/C up and down, wheel to glide forward.
+  Walk   like Fly, but moving stays level (no climbing or falling).
+         Height changes only with E/C. No jumping.
+
+  Keyboard movement keeps its smooth start and stop in all modes.
+*/
+
+var navigation = {
+  mode: "fly",
+  controls: null,
+  pivot: null,
+  radius: null,
+  targetRadius: null,
+  targetYaw: 0,
+  targetPitch: 0,
+  appliedYaw: null,
+  appliedPitch: null,
+  holdPosition: false,
+  glide: 0,
+  drag: null,
+  lastUpdate: 0
+};
+
+var NAVIGATION_HELP = {
+  orbit:
+    "Orbit · Rotate around model: left drag · Pan: right drag · Zoom: wheel · New center: double-click · Move: WASD/arrows · Up/down: E/C · Speed: , . · Switch: O",
+  fly:
+    "Fly · Look around: left drag · Pan: right drag · Glide: wheel · Move: WASD/arrows · Up/down: E/C · Speed: , . · Look at point: double-click · Switch: O",
+  walk:
+    "Look: left drag · Walk: WASD/arrows (stays level) · Up/down: E/C · Glide: wheel · Speed: , ."
+};
+
+function smoothFactor(
+  deltaSeconds,
+  timeConstant
+) {
+  return timeConstant > 0
+    ? 1 - Math.exp(-deltaSeconds / timeConstant)
+    : 1;
+}
+
+function clampPitch(
+  pitch
+) {
+  var limit =
+    Math.PI / 2 - 0.02;
+
+  return Math.max(
+    -limit,
+    Math.min(limit, pitch)
+  );
+}
+
+/*
+  Potree direction: (0, 1, 0) turned by pitch around X, then by yaw around Z.
+*/
+function yawPitchFromDirection(
+  direction
+) {
+  var d =
+    normalize3({
+      x: direction.x,
+      y: direction.y,
+      z: direction.z
+    });
+
+  return {
+    yaw: Math.atan2(-d.x, d.y),
+    pitch: Math.asin(Math.max(-1, Math.min(1, d.z)))
+  };
+}
+
+function directionFromYawPitch(
+  yaw,
+  pitch
+) {
+  return {
+    x: -Math.sin(yaw) * Math.cos(pitch),
+    y: Math.cos(yaw) * Math.cos(pitch),
+    z: Math.sin(pitch)
+  };
+}
+
+/* Shortest way round, so a turn never spins the long way */
+function nearestAngle(
+  from,
+  to
+) {
+  var difference =
+    to - from;
+
+  difference =
+    Math.atan2(
+      Math.sin(difference),
+      Math.cos(difference)
+    );
+
+  return from + difference;
+}
+
+function installNavigation() {
+  if (
+    !viewer ||
+    navigation.controls
+  ) {
+    return;
+  }
+
+  /*
+    Potree calls update() on the active controls every frame and then
+    copies the view into the camera. This object only uses that hook;
+    all mouse input is handled below.
+  */
+  /*
+    Potree renders an overlay scene that belongs to the active
+    controls (sceneControls). Ours stays empty. It is created with
+    the same Scene class Potree's own controls use.
+  */
+  var sceneControls =
+    null;
+
+  var potreeControls =
+    viewer.orbitControls ||
+    viewer.fpControls ||
+    viewer.earthControls ||
+    null;
+
+  if (
+    window.THREE &&
+    typeof window.THREE.Scene ===
+    "function"
+  ) {
+    sceneControls =
+      new window.THREE.Scene();
+  } else if (
+    potreeControls &&
+    potreeControls.sceneControls
+  ) {
+    sceneControls =
+      new potreeControls.sceneControls.constructor();
+  }
+
+  var controls = {
+    name: "SmoothNavigation",
+    enabled: true,
+    scene: null,
+    sceneControls: sceneControls,
+    setScene: function (scene) { this.scene = scene; },
+    update: function (delta) { updateNavigation(delta); },
+    stop: function () {},
+    zoomToLocation: function () {},
+    dispatchEvent: function () {},
+    addEventListener: function () {},
+    removeEventListener: function () {},
+    hasEventListener: function () { return false; }
+  };
+
+  navigation.controls =
+    controls;
+
+  if (
+    typeof viewer.setControls ===
+    "function"
+  ) {
+    viewer.setControls(
+      controls
+    );
+  } else {
+    viewer.controls =
+      controls;
+  }
+
+  if (
+    viewer.renderer &&
+    viewer.renderer.domElement
+  ) {
+    bindNavigationMouse(
+      viewer.renderer.domElement
+    );
+  }
+
+  var savedMode =
+    null;
+
+  try {
+    savedMode =
+      window.localStorage.getItem(
+        "viewer:navigationMode"
+      );
+  } catch (
+    error
+  ) {
+    savedMode = null;
+  }
+
+  setNavigationMode(
+    savedMode ||
+    LOCATION_CONFIG.navigationMode ||
+    CONFIG.navigationMode,
+    true
+  );
+}
+
+function toggleNavigationMode() {
+  setNavigationMode(
+    navigation.mode === "orbit"
+      ? "fly"
+      : "orbit"
+  );
+}
+
+function getCanvasDistance() {
+  var view =
+    viewer.scene.view;
+
+  if (
+    navigation.mode === "orbit" &&
+    navigation.radius
+  ) {
+    return navigation.radius;
+  }
+
+  var radius =
+    Number(view.radius);
+
+  return isFinite(radius) && radius > 0
+    ? radius
+    : 10;
+}
+
+/*
+  Called by placeCamera (zoom buttons, start view) and setOrbitCenter.
+*/
+function setNavigationPivot(
+  center
+) {
+  if (
+    !viewer ||
+    !viewer.scene ||
+    !center ||
+    typeof center.clone !==
+    "function"
+  ) {
+    return;
+  }
+
+  var view =
+    viewer.scene.view;
+
+  navigation.pivot =
+    center.clone();
+
+  navigation.radius =
+    navigation.targetRadius =
+      Math.max(
+        view.position.distanceTo(center),
+        0.01
+      );
+
+  navigation.targetYaw =
+    view.yaw;
+
+  navigation.targetPitch =
+    view.pitch;
+
+  navigation.appliedYaw =
+    view.yaw;
+
+  navigation.appliedPitch =
+    view.pitch;
+
+  navigation.holdPosition =
+    false;
+
+  navigation.glide =
+    0;
+}
+
+/* Keyboard movement in orbit mode carries the center along */
+function navigationCameraMoved(
+  displacement
+) {
+  if (
+    navigation.mode === "orbit" &&
+    navigation.pivot
+  ) {
+    navigation.pivot.add(
+      displacement
+    );
+  }
+}
+
+function setNavigationMode(
+  mode,
+  silent
+) {
+  if (
+    ["orbit", "fly", "walk"].indexOf(mode) === -1
+  ) {
+    mode = "fly";
+  }
+
+  navigation.mode =
+    mode;
+
+  navigation.glide =
+    0;
+
+  if (
+    mode === "orbit" &&
+    viewer &&
+    viewer.scene
+  ) {
+    /*
+      Orbit around what is in the middle of the screen, or around a
+      point straight ahead at the usual distance.
+    */
+    var view =
+      viewer.scene.view;
+
+    var canvas =
+      viewer.renderer &&
+      viewer.renderer.domElement;
+
+    var hit =
+      canvas
+        ? pickPointAt(
+          canvas.clientWidth / 2,
+          canvas.clientHeight / 2
+        )
+        : null;
+
+    if (
+      !hit
+    ) {
+      hit =
+        view.position.clone().add(
+          view.direction.multiplyScalar(
+            getCanvasDistance()
+          )
+        );
+    }
+
+    setNavigationPivot(
+      hit
+    );
+  }
+
+  var toggle =
+    getElement(
+      "toggleNavigation"
+    );
+
+  if (
+    toggle
+  ) {
+    toggle.dataset.mode =
+      mode;
+
+    toggle.title =
+      mode === "orbit"
+        ? "Orbit: dragging rotates around the model. Click for Fly (O)"
+        : "Fly: dragging looks around like in a game. Click for Orbit (O)";
+  }
+
+  try {
+    window.localStorage.setItem(
+      "viewer:navigationMode",
+      mode
+    );
+  } catch (
+    error
+  ) {
+    /* storage unavailable */
+  }
+
+  var help =
+    document.querySelector(
+      ".viewer-help"
+    );
+
+  if (
+    help
+  ) {
+    help.textContent =
+      NAVIGATION_HELP[mode];
+  }
+
+  if (
+    !silent
+  ) {
+    setStatus(
+      mode.charAt(0).toUpperCase() +
+      mode.slice(1) +
+      " navigation",
+      "idle"
+    );
+  }
+}
+
+/* Point of the scan under a pixel of the canvas, or null */
+function pickPointAt(
+  x,
+  y
+) {
+  try {
+    if (
+      !window.Potree ||
+      !Potree.Utils ||
+      typeof Potree.Utils.getMousePointCloudIntersection !==
+      "function"
+    ) {
+      return null;
+    }
+
+    var clouds =
+      (viewer.scene.pointclouds || []).filter(
+        function (cloud) {
+          return cloud.visible !== false;
+        }
+      );
+
+    if (
+      clouds.length === 0
+    ) {
+      return null;
+    }
+
+    var hit =
+      Potree.Utils.getMousePointCloudIntersection(
+        { x: x, y: y },
+        viewer.scene.getActiveCamera(),
+        viewer,
+        clouds,
+        { pickClipped: false }
+      );
+
+    return hit && hit.location
+      ? hit.location.clone()
+      : null;
+  } catch (
+    error
+  ) {
+    return null;
+  }
+}
+
+/* Turn smoothly toward a point without moving the camera */
+function lookAtSmoothly(
+  point
+) {
+  var view =
+    viewer.scene.view;
+
+  var angles =
+    yawPitchFromDirection(
+      point.clone().sub(
+        view.position
+      )
+    );
+
+  navigation.targetYaw =
+    nearestAngle(
+      view.yaw,
+      angles.yaw
+    );
+
+  navigation.targetPitch =
+    clampPitch(
+      angles.pitch
+    );
+
+  if (
+    navigation.mode === "orbit"
+  ) {
+    navigation.pivot =
+      point.clone();
+
+    navigation.radius =
+      navigation.targetRadius =
+        Math.max(
+          view.position.distanceTo(point),
+          0.01
+        );
+
+    navigation.holdPosition =
+      true;
+  } else {
+    navigation.pivot =
+      point.clone();
+  }
+}
+
+function bindNavigationMouse(
+  canvas
+) {
+  /*
+    Listen on the whole render area, not only the canvas, so
+    elements Potree places above the canvas can't swallow input.
+  */
+  var surface =
+    document.getElementById(
+      "potree_render_area"
+    ) ||
+    canvas;
+
+  surface.addEventListener(
+    "contextmenu",
+    function (event) {
+      event.preventDefault();
+    }
+  );
+
+  surface.addEventListener(
+    "pointerdown",
+    function (event) {
+      var pan =
+        event.button === 2 ||
+        event.button === 1 ||
+        (event.button === 0 && event.shiftKey);
+
+      if (
+        event.button !== 0 &&
+        !pan
+      ) {
+        return;
+      }
+
+      var orbit =
+        !pan &&
+        event.altKey;
+
+      navigation.drag = {
+        id: event.pointerId,
+        type: pan ? "pan" : orbit ? "orbit" : "look",
+        x: event.clientX,
+        y: event.clientY
+      };
+
+      if (
+        orbit
+      ) {
+        startOrbitDrag(
+          canvas
+        );
+      }
+
+      navigation.holdPosition =
+        false;
+
+      try {
+        surface.setPointerCapture(
+          event.pointerId
+        );
+      } catch (
+        error
+      ) {
+        /* ignore */
+      }
+
+      surface.style.cursor =
+        pan ? "move" : "grabbing";
+    }
+  );
+
+  surface.addEventListener(
+    "pointermove",
+    function (event) {
+      var drag =
+        navigation.drag;
+
+      if (
+        !drag ||
+        drag.id !== event.pointerId
+      ) {
+        return;
+      }
+
+      var dx =
+        event.clientX - drag.x;
+
+      var dy =
+        event.clientY - drag.y;
+
+      drag.x =
+        event.clientX;
+
+      drag.y =
+        event.clientY;
+
+      if (
+        drag.type === "look" ||
+        drag.type === "orbit"
+      ) {
+        var sensitivity =
+          Number(CONFIG.lookSensitivity) || 0.004;
+
+        navigation.targetYaw -=
+          dx * sensitivity;
+
+        navigation.targetPitch =
+          clampPitch(
+            navigation.targetPitch -
+            dy * sensitivity
+          );
+      } else {
+        panView(
+          dx,
+          dy,
+          canvas
+        );
+      }
+    }
+  );
+
+  var endDrag =
+    function (event) {
+      if (
+        navigation.drag &&
+        navigation.drag.id === event.pointerId
+      ) {
+        navigation.drag =
+          null;
+
+        surface.style.cursor =
+          "";
+      }
+    };
+
+  surface.addEventListener(
+    "pointerup",
+    endDrag
+  );
+
+  surface.addEventListener(
+    "pointercancel",
+    endDrag
+  );
+
+  surface.addEventListener(
+    "wheel",
+    function (event) {
+      event.preventDefault();
+
+      /* Lines and pages become pixels so every mouse feels the same */
+      var amount =
+        event.deltaY *
+        (event.deltaMode === 1 ? 33 : event.deltaMode === 2 ? 400 : 1);
+
+      amount =
+        Math.max(-300, Math.min(300, amount));
+
+      if (
+        isOrthographic()
+      ) {
+        navigation.orthoTarget =
+          Math.max(
+            (navigation.orthoTarget || viewer.scene.view.radius || 1) *
+            Math.pow(1.0012, amount),
+            0.01
+          );
+
+        return;
+      }
+
+      if (
+        navigation.mode === "orbit"
+      ) {
+        navigation.holdPosition =
+          false;
+
+        navigation.targetRadius =
+          Math.max(
+            (navigation.targetRadius || getCanvasDistance()) *
+            Math.pow(1.0012, amount),
+            0.02
+          );
+      } else {
+        var speedScale =
+          (Number(state.navigationSpeed) || 0.35) /
+          (Number(CONFIG.navigationSpeed) || 0.35);
+
+        /* one wheel notch glides about 8% of the scene distance */
+        navigation.glide -=
+          (amount / 100) *
+          0.08 *
+          getCanvasDistance() *
+          speedScale /
+          CONFIG.glideTime;
+      }
+    },
+    { passive: false }
+  );
+
+  surface.addEventListener(
+    "dblclick",
+    function (event) {
+      var rect =
+        canvas.getBoundingClientRect();
+
+      var point =
+        pickPointAt(
+          event.clientX - rect.left,
+          event.clientY - rect.top
+        );
+
+      if (
+        point
+      ) {
+        lookAtSmoothly(
+          point
+        );
+      }
+    }
+  );
+}
+
+/* Drag the scene with the mouse: right drag, middle drag or shift + left drag */
+function panView(
+  dx,
+  dy,
+  canvas
+) {
+  var view =
+    viewer.scene.view;
+
+  var fov =
+    typeof viewer.getFOV === "function"
+      ? Number(viewer.getFOV()) || 60
+      : 60;
+
+  var worldPerPixel =
+    2 *
+    Math.tan(fov * Math.PI / 360) *
+    getCanvasDistance() /
+    Math.max(canvas.clientHeight, 1);
+
+  var forward =
+    view.direction;
+
+  var right =
+    forward.clone().cross(
+      forward.clone().set(0, 0, 1)
+    );
+
+  if (
+    right.lengthSq() < 0.000001
+  ) {
+    right.set(1, 0, 0);
+  }
+
+  right.normalize();
+
+  var up =
+    navigation.mode === "walk"
+      ? forward.clone().set(0, 0, 1)
+      : right.clone().cross(forward).normalize();
+
+  var offset =
+    right.multiplyScalar(-dx * worldPerPixel)
+      .add(
+        up.multiplyScalar(dy * worldPerPixel)
+      );
+
+  view.position.add(
+    offset
+  );
+
+  if (
+    navigation.pivot
+  ) {
+    navigation.pivot.add(
+      offset
+    );
+  }
+}
+
+function updateNavigation(
+  delta
+) {
+  navigation.lastUpdate =
+    performance.now();
+
+  if (
+    !viewer ||
+    !viewer.scene ||
+    !viewer.scene.view
+  ) {
+    return;
+  }
+
+  var view =
+    viewer.scene.view;
+
+  var dt =
+    Number(delta);
+
+  if (
+    !isFinite(dt) ||
+    dt <= 0 ||
+    dt > 0.1
+  ) {
+    dt = 0.016;
+  }
+
+  /*
+    Someone else moved the camera (zoom buttons, start view):
+    take over its angles instead of turning back.
+  */
+  if (
+    navigation.appliedYaw === null ||
+    Math.abs(view.yaw - navigation.appliedYaw) > 0.000001 ||
+    Math.abs(view.pitch - navigation.appliedPitch) > 0.000001
+  ) {
+    navigation.targetYaw =
+      view.yaw;
+
+    navigation.targetPitch =
+      view.pitch;
+  }
+
+  var lookAlpha =
+    smoothFactor(
+      dt,
+      CONFIG.lookSmoothing
+    );
+
+  /*
+    Potree keeps yaw within one full turn, so steer by the shortest
+    angle and keep the target in the same turn as the view.
+  */
+  var yawDifference =
+    Math.atan2(
+      Math.sin(navigation.targetYaw - view.yaw),
+      Math.cos(navigation.targetYaw - view.yaw)
+    );
+
+  view.yaw +=
+    yawDifference *
+    lookAlpha;
+
+  navigation.targetYaw =
+    view.yaw +
+    yawDifference *
+    (1 - lookAlpha);
+
+  view.pitch +=
+    (navigation.targetPitch - view.pitch) *
+    lookAlpha;
+
+  navigation.appliedYaw =
+    view.yaw;
+
+  navigation.appliedPitch =
+    view.pitch;
+
+  /* Orthographic: the wheel changes the scale of the view */
+  if (
+    isOrthographic() &&
+    navigation.orthoTarget
+  ) {
+    view.radius +=
+      (navigation.orthoTarget - view.radius) *
+      smoothFactor(dt, CONFIG.zoomSmoothing);
+  }
+
+  if (
+    navigation.mode === "orbit"
+  ) {
+    if (
+      !navigation.pivot
+    ) {
+      setNavigationPivot(
+        view.position.clone().add(
+          view.direction.multiplyScalar(
+            getCanvasDistance()
+          )
+        )
+      );
+    }
+
+    if (
+      navigation.holdPosition
+    ) {
+      /* turning toward a double-clicked point: stay in place */
+      navigation.radius =
+        navigation.targetRadius =
+          Math.max(
+            view.position.distanceTo(navigation.pivot),
+            0.01
+          );
+
+      if (
+        Math.abs(navigation.targetYaw - view.yaw) < 0.0005 &&
+        Math.abs(navigation.targetPitch - view.pitch) < 0.0005
+      ) {
+        navigation.holdPosition =
+          false;
+      }
+    } else {
+      navigation.radius +=
+        (navigation.targetRadius - navigation.radius) *
+        smoothFactor(dt, CONFIG.zoomSmoothing);
+
+      view.position.copy(
+        navigation.pivot.clone().sub(
+          view.direction.multiplyScalar(
+            navigation.radius
+          )
+        )
+      );
+    }
+
+    if (
+      !isOrthographic()
+    ) {
+      view.radius =
+        navigation.radius;
+    }
+
+    return;
+  }
+
+  /*
+    Alt + drag: circle around the orbit point. Keeps going until the
+    smoothed rotation has caught up after the mouse is released.
+  */
+  if (
+    navigation.orbitActive &&
+    navigation.orbitPoint
+  ) {
+    view.position.copy(
+      navigation.orbitPoint.clone().sub(
+        view.direction.multiplyScalar(
+          navigation.orbitDistance
+        )
+      )
+    );
+
+    var stillDragging =
+      navigation.drag &&
+      navigation.drag.type === "orbit";
+
+    if (
+      !stillDragging &&
+      Math.abs(navigation.targetYaw - view.yaw) < 0.0005 &&
+      Math.abs(navigation.targetPitch - view.pitch) < 0.0005
+    ) {
+      navigation.orbitActive =
+        false;
+    }
+  }
+
+  /* Fly and walk: wheel glide with a soft stop */
+  if (
+    Math.abs(navigation.glide) > 0.000001
+  ) {
+    var direction =
+      view.direction;
+
+    if (
+      navigation.mode === "walk"
+    ) {
+      direction.z = 0;
+
+      if (
+        direction.lengthSq() < 0.000001
+      ) {
+        var level =
+          directionFromYawPitch(view.yaw, 0);
+
+        direction.set(level.x, level.y, 0);
+      }
+
+      direction.normalize();
+    }
+
+    view.position.add(
+      direction.multiplyScalar(
+        navigation.glide * dt
+      )
+    );
+
+    navigation.glide *=
+      Math.exp(-dt / CONFIG.glideTime);
+
+    if (
+      Math.abs(navigation.glide) < 0.0001
+    ) {
+      navigation.glide = 0;
+    }
+  }
+}
+
+function bindNavigationModeButtons() {
+  document
+    .querySelectorAll("[data-nav-mode]")
+    .forEach(function (button) {
+      button.addEventListener(
+        "click",
+        function () {
+          setNavigationMode(
+            button.dataset.navMode
+          );
+        }
+      );
+    });
+
+  /* 1 Orbit, 2 Fly, 3 Walk */
+  document.addEventListener(
+    "keydown",
+    function (event) {
+      if (
+        event.ctrlKey ||
+        event.metaKey ||
+        event.altKey ||
+        isTypingInField(event.target)
+      ) {
+        return;
+      }
+
+      var modes = {
+        "1": "orbit",
+        "2": "fly",
+        "3": "walk"
+      };
+
+      if (
+        modes[event.key]
+      ) {
+        setNavigationMode(
+          modes[event.key]
+        );
+      }
+    }
+  );
+}
+
+
+/* -------------------------------------------------------------------------- */
+/* PERSPECTIVE / ORTHOGRAPHIC                                                 */
+/* -------------------------------------------------------------------------- */
+
+function getViewerFov() {
+  var fov =
+    viewer && typeof viewer.getFOV === "function"
+      ? Number(viewer.getFOV())
+      : 60;
+
+  return isFinite(fov) && fov > 0
+    ? fov
+    : 60;
+}
+
+function getViewerAspect() {
+  var canvas =
+    viewer &&
+    viewer.renderer &&
+    viewer.renderer.domElement;
+
+  var aspect =
+    canvas
+      ? (canvas.clientWidth || canvas.width || 1) /
+        Math.max(canvas.clientHeight || canvas.height || 1, 1)
+      : 1;
+
+  return isFinite(aspect) && aspect > 0
+    ? aspect
+    : 1;
+}
+
+function isOrthographic() {
+  return Boolean(
+    viewer &&
+    viewer.scene &&
+    window.Potree &&
+    Potree.CameraMode &&
+    viewer.scene.cameraMode === Potree.CameraMode.ORTHOGRAPHIC
+  );
+}
+
+/*
+  Switches between perspective and orthographic. What is in the
+  middle of the screen keeps roughly the same size.
+*/
+function toggleProjection() {
+  if (
+    !viewer ||
+    !window.Potree ||
+    !Potree.CameraMode ||
+    typeof viewer.setCameraMode !== "function"
+  ) {
+    setStatus(
+      "Orthographic view is not available in this Potree version.",
+      "error"
+    );
+
+    return;
+  }
+
+  var view =
+    viewer.scene.view;
+
+  var canvas =
+    viewer.renderer.domElement;
+
+  var tanHalf =
+    Math.tan(getViewerFov() * Math.PI / 360);
+
+  if (
+    !isOrthographic()
+  ) {
+    var hit =
+      pickPointAt(
+        canvas.clientWidth / 2,
+        canvas.clientHeight / 2
+      );
+
+    var focusDistance =
+      hit
+        ? view.position.distanceTo(hit)
+        : Number(view.radius) || 10;
+
+    navigation.perspectiveRadius =
+      view.radius;
+
+    viewer.setCameraMode(
+      Potree.CameraMode.ORTHOGRAPHIC
+    );
+
+    view.radius =
+      focusDistance * tanHalf * getViewerAspect();
+
+    navigation.orthoTarget =
+      view.radius;
+
+    setStatus(
+      "Orthographic view",
+      "idle"
+    );
+  } else {
+    var orthoHalfWidth =
+      Number(view.radius) || 1;
+
+    viewer.setCameraMode(
+      Potree.CameraMode.PERSPECTIVE
+    );
+
+    view.radius =
+      orthoHalfWidth / (tanHalf * getViewerAspect()) ||
+      navigation.perspectiveRadius ||
+      10;
+
+    navigation.orthoTarget =
+      null;
+
+    setStatus(
+      "Perspective view",
+      "idle"
+    );
+  }
+
+  var button =
+    getElement(
+      "toggleProjection"
+    );
+
+  if (
+    button
+  ) {
+    var ortho =
+      isOrthographic();
+
+    button.setAttribute(
+      "aria-pressed",
+      String(ortho)
+    );
+
+    button.dataset.projection =
+      ortho
+        ? "orthographic"
+        : "perspective";
+
+    button.title =
+      ortho
+        ? "Orthographic view. Click for perspective"
+        : "Perspective view. Click for orthographic";
+  }
+}
+
+
+/* Alt + drag: orbit around the point in the middle of the screen */
+function startOrbitDrag(
+  canvas
+) {
+  var view =
+    viewer.scene.view;
+
+  var hit =
+    pickPointAt(
+      canvas.clientWidth / 2,
+      canvas.clientHeight / 2
+    );
+
+  var distance =
+    hit
+      ? view.position.distanceTo(hit)
+      : Number(view.radius) || 10;
+
+  navigation.orbitDistance =
+    Math.max(distance, 0.05);
+
+  /* straight ahead at that depth, so starting the orbit never jumps */
+  navigation.orbitPoint =
+    view.position.clone().add(
+      view.direction.multiplyScalar(
+        navigation.orbitDistance
+      )
+    );
+
+  navigation.orbitActive =
+    true;
+}
+
+
+/* -------------------------------------------------------------------------- */
+/* EXPORT CROP                                                                */
+/* -------------------------------------------------------------------------- */
+
+/*
+  With an active section the PNG is cropped to the visible points,
+  so the export shows the section and not the empty viewer around it.
+*/
+function exportCanvasDataUrl(
+  canvas
+) {
+  if (
+    !state.sectionVolume ||
+    CONFIG.cropExportToSection === false
+  ) {
+    return canvas.toDataURL(
+      "image/png"
+    );
+  }
+
+  try {
+    var width =
+      canvas.width;
+
+    var height =
+      canvas.height;
+
+    /* find the points on a small copy: fast even for 5x exports */
+    var scale =
+      Math.min(
+        1,
+        1600 / Math.max(width, height)
+      );
+
+    var smallWidth =
+      Math.max(1, Math.round(width * scale));
+
+    var smallHeight =
+      Math.max(1, Math.round(height * scale));
+
+    var small =
+      document.createElement("canvas");
+
+    small.width =
+      smallWidth;
+
+    small.height =
+      smallHeight;
+
+    var smallContext =
+      small.getContext("2d");
+
+    smallContext.drawImage(
+      canvas,
+      0,
+      0,
+      smallWidth,
+      smallHeight
+    );
+
+    var pixels =
+      smallContext.getImageData(
+        0,
+        0,
+        smallWidth,
+        smallHeight
+      ).data;
+
+    var minX = smallWidth;
+    var minY = smallHeight;
+    var maxX = -1;
+    var maxY = -1;
+
+    for (var y = 0; y < smallHeight; y++) {
+      for (var x = 0; x < smallWidth; x++) {
+        if (pixels[(y * smallWidth + x) * 4 + 3] > 8) {
+          if (x < minX) minX = x;
+          if (x > maxX) maxX = x;
+          if (y < minY) minY = y;
+          if (y > maxY) maxY = y;
+        }
+      }
+    }
+
+    if (
+      maxX < 0
+    ) {
+      return canvas.toDataURL(
+        "image/png"
+      );
+    }
+
+    var padding =
+      Math.round(
+        Math.max(width, height) * 0.02
+      );
+
+    var left =
+      Math.max(0, Math.floor(minX / scale) - padding);
+
+    var top =
+      Math.max(0, Math.floor(minY / scale) - padding);
+
+    var right =
+      Math.min(width, Math.ceil((maxX + 1) / scale) + padding);
+
+    var bottom =
+      Math.min(height, Math.ceil((maxY + 1) / scale) + padding);
+
+    var output =
+      document.createElement("canvas");
+
+    output.width =
+      right - left;
+
+    output.height =
+      bottom - top;
+
+    output.getContext("2d").drawImage(
+      canvas,
+      left,
+      top,
+      output.width,
+      output.height,
+      0,
+      0,
+      output.width,
+      output.height
+    );
+
+    return output.toDataURL(
+      "image/png"
+    );
+  } catch (
+    error
+  ) {
+    console.warn(
+      "Could not crop the export to the section:",
+      error
+    );
+
+    return canvas.toDataURL(
+      "image/png"
+    );
+  }
+}
+
+
+/* -------------------------------------------------------------------------- */
+/* PANEL HEIGHTS                                                              */
+/* -------------------------------------------------------------------------- */
+
+/* Height the library needs to show all its entries without scrolling */
+function measureLibraryHeight(
+  libraryPanel,
+  headerHeight
+) {
+  var total =
+    headerHeight + 1;
+
+  var list =
+    getElement("libraryList");
+
+  if (
+    list &&
+    list.children.length > 0
+  ) {
+    var first =
+      list.firstElementChild.getBoundingClientRect();
+
+    var last =
+      list.lastElementChild.getBoundingClientRect();
+
+    var style =
+      window.getComputedStyle(list);
+
+    total +=
+      (last.bottom - first.top) +
+      parseFloat(style.paddingTop || 0) +
+      parseFloat(style.paddingBottom || 0) +
+      parseFloat(window.getComputedStyle(list.lastElementChild).marginBottom || 0);
+  }
+
+  var empty =
+    getElement("libraryEmpty");
+
+  if (
+    empty &&
+    empty.offsetParent !== null
+  ) {
+    total +=
+      empty.offsetHeight;
+  }
+
+  return Math.ceil(total);
+}
+
+/* Height the inspector needs for its content plus its toggle bar */
+function measureInspectorHeight(
+  toggleHeight
+) {
+  var total =
+    toggleHeight;
+
+  ["inspectorEmpty", "inspectorContent"].forEach(function (id) {
+    var element =
+      getElement(id);
+
+    if (
+      element &&
+      !element.classList.contains("hidden")
+    ) {
+      total +=
+        element.offsetHeight;
+    }
+  });
+
+  return Math.ceil(total);
+}
+
+/* Re-measure the panels whenever the library or inspector content changes */
+(function () {
+  ["renderLibrary", "updateInspector", "updateSectionControls"].forEach(function (name) {
+    var original =
+      window[name];
+
+    if (
+      typeof original !== "function"
+    ) {
+      return;
+    }
+
+    window[name] =
+      function () {
+        var result =
+          original.apply(this, arguments);
+
+        window.requestAnimationFrame(
+          updatePanelLayout
+        );
+
+        return result;
+      };
+  });
+})();

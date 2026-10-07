@@ -13,6 +13,13 @@
     href="data:,"
   />
 
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    rel="stylesheet"
+    href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500;600&display=swap"
+  />
+
   <link
     rel="stylesheet"
     href="./build/potree/potree.css"
@@ -239,6 +246,7 @@
         </div>
 
         <div class="viewer-toolbar">
+
           <button
             id="resetView"
             type="button"
@@ -295,6 +303,115 @@
                 r="2"
                 fill="currentColor"
               />
+            </svg>
+          </button>
+
+          <button
+            id="toggleNavigation"
+            class="nav-toggle"
+            type="button"
+            data-mode="fly"
+            title="Fly: dragging looks around like in a game. Click for Orbit (O)"
+            style="background: none; border: none; cursor: pointer;"
+          >
+            <!-- shown in Fly mode: an eye -->
+            <svg
+              class="nav-icon-fly"
+              width="24"
+              height="24"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z" />
+              <circle cx="12" cy="12" r="3" />
+            </svg>
+
+            <!-- shown in Orbit mode: two arrows circling a centre point -->
+            <svg
+              class="nav-icon-orbit"
+              width="24"
+              height="24"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
+              <path d="M21 3v5h-5" />
+              <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
+              <path d="M8 16H3v5" />
+              <circle cx="12" cy="12" r="1.5" fill="currentColor" />
+            </svg>
+          </button>
+
+          <button
+            id="toggleProjection"
+            class="projection-toggle"
+            type="button"
+            title="Perspective view. Click for orthographic"
+            aria-pressed="false"
+            data-projection="perspective"
+            style="background: none; border: none; cursor: pointer;"
+          >
+            <!-- shown in perspective: lines meeting at a vanishing point -->
+            <svg
+              class="projection-icon-perspective"
+              width="24"
+              height="24"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M9 4h6l6 16H3L9 4z" />
+              <path d="M6.4 12h11.2" />
+              <path d="M12 4v16" />
+            </svg>
+
+            <!-- shown in orthographic: a cube with parallel edges -->
+            <svg
+              class="projection-icon-orthographic"
+              width="24"
+              height="24"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M12 3 3 7.5v9L12 21l9-4.5v-9L12 3z" />
+              <path d="M3 7.5 12 12l9-4.5" />
+              <path d="M12 12v9" />
+            </svg>
+          </button>
+
+          <button
+            id="copyStartView"
+            type="button"
+            title="Set start view: copies the current view for location-config.js"
+            style="background: none; border: none; cursor: pointer;"
+          >
+            <svg
+              width="24"
+              height="24"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z" />
+              <circle cx="12" cy="13" r="3" />
             </svg>
           </button>
 
@@ -541,24 +658,24 @@
                   class="hidden"
                 >
                   <label
-                    for="sectionAxis"
+                    for="sectionAngle"
                     class="control-label"
                   >
-                    Vertical axis
+                    Direction (rotation around Z)
+
+                    <output id="sectionAngleValue">0°</output>
                   </label>
 
-                  <select
-                    id="sectionAxis"
-                    class="control-input"
-                  >
-                    <option value="x">
-                      X axis
-                    </option>
-
-                    <option value="y">
-                      Y axis
-                    </option>
-                  </select>
+                  <input
+                    id="sectionAngle"
+                    class="range-input"
+                    type="range"
+                    min="0"
+                    max="179"
+                    step="1"
+                    value="0"
+                    title="0° cuts across X, 90° cuts across Y"
+                  />
                 </div>
 
                 <label
@@ -596,11 +713,12 @@
 
                 <input
                   id="sectionThickness"
-                  class="number-input"
-                  type="number"
+                  class="range-input"
+                  type="range"
                   min="0.001"
-                  step="0.01"
-                  value="1"
+                  max="1"
+                  step="0.001"
+                  value="0.1"
                   disabled
                 />
 

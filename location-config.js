@@ -68,7 +68,7 @@ window.LOCATION_CONFIG = {
       <h3>Overview</h3>
 
       <p>
-        Spatial Library Brienzauls is a point-cloud viewer for loading,
+        Spatial Library Blatten, Lötschental VS is a point-cloud viewer for loading,
         visualizing, inspecting and comparing COPC LAZ scans.
       </p>
 

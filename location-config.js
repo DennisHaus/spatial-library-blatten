@@ -16,7 +16,7 @@ window.LOCATION_CONFIG = {
   brandSubtitle: `
     copc viewer & point cloud model interface | for collecting, storing and
     visualizing spatial recordings and spatial visions of Blatten, Lötschental VS
-    during MScLa Design Studio, Spring Semester 2026 |
+    during MScLa DesignStudio, Spring Semester 2026 |
     beta version
     <br><br>
     See all Places <a

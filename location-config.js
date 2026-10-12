@@ -40,8 +40,8 @@ window.LOCATION_CONFIG = {
   `,
 
   startView: {
-    position: [-7073.382, -1264.729, 4934.589],
-    target: [-990.439, -1313.351, 2101.884]
+    position: [-7251.949, -646.944, 4953.605],
+    target: [-1183.636, -1195.484, 1786.759]
   },
 
   navigationMode: "Orbit",

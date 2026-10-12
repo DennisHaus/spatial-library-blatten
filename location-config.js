@@ -39,7 +39,10 @@ window.LOCATION_CONFIG = {
     , Kyoto Design Lab
   `,
 
-  startView: null,
+  startView: {
+    position: [-7073.382, -1264.729, 4934.589],
+    target: [-990.439, -1313.351, 2101.884]
+  },
 
   navigationMode: "fly",
 

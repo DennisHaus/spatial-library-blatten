@@ -44,7 +44,7 @@ window.LOCATION_CONFIG = {
     target: [-990.439, -1313.351, 2101.884]
   },
 
-  navigationMode: "fly",
+  navigationMode: "Orbit",
 
   uploadUrl:
     "https://github.com/DennisHaus/spatial-library-blatten/upload/main/scans",

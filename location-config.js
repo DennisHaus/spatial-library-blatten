@@ -62,7 +62,7 @@ window.LOCATION_CONFIG = {
   useRawBaseForPaths: false,
 
   rawBaseUrl:
-    "https://raw.githubusercontent.com/DennisHaus/pointcloud_viewer/main",
+    "https://github.com/DennisHaus/spatial-library-blatten",
 
   downloadPassword: "Voser",
 

@@ -2,6 +2,54 @@
   "version": 1,
   "scans": [
     {
+      "id": "scans-250610-blatten-dom-vorher-nachher-h265-1",
+      "name": "250610 Blatten Dom Vorher Nachher H265 1",
+      "filename": "250610_Blatten_DOM-vorher-nachher_h265_1.mp4",
+      "path": "./scans/250610_Blatten_DOM-vorher-nachher_h265_1.mp4",
+      "url": "./scans/250610_Blatten_DOM-vorher-nachher_h265_1.mp4",
+      "format": "mp4",
+      "sizeBytes": 80748538,
+      "pointCount": null,
+      "crs": null,
+      "uploadedAt": "2026-10-22"
+    },
+    {
+      "id": "scans-260224-blatten-longsection12-3",
+      "name": "260224 Blatten Longsection12 3",
+      "filename": "260224_Blatten_LongSection12_3.png",
+      "path": "./scans/260224_Blatten_LongSection12_3.png",
+      "url": "./scans/260224_Blatten_LongSection12_3.png",
+      "format": "png",
+      "sizeBytes": 15621164,
+      "pointCount": null,
+      "crs": null,
+      "uploadedAt": "2026-10-22"
+    },
+    {
+      "id": "scans-260224-blatten-longsection14-3",
+      "name": "260224 Blatten Longsection14 3",
+      "filename": "260224_Blatten_LongSection14_3.png",
+      "path": "./scans/260224_Blatten_LongSection14_3.png",
+      "url": "./scans/260224_Blatten_LongSection14_3.png",
+      "format": "png",
+      "sizeBytes": 12610185,
+      "pointCount": null,
+      "crs": null,
+      "uploadedAt": "2026-10-22"
+    },
+    {
+      "id": "scans-260724-blatten-5-3",
+      "name": "260724 Blatten 5 3",
+      "filename": "260724_Blatten_5_3.png",
+      "path": "./scans/260724_Blatten_5_3.png",
+      "url": "./scans/260724_Blatten_5_3.png",
+      "format": "png",
+      "sizeBytes": 16135678,
+      "pointCount": null,
+      "crs": null,
+      "uploadedAt": "2026-10-22"
+    },
+    {
       "id": "scans-blatten-topografie-monate-2021-blatten",
       "name": "2021 Blatten",
       "filename": "2021_Blatten.copc.laz",
@@ -38,16 +86,16 @@
       "uploadedAt": "2026-10-02"
     },
     {
-      "id": "scans-blatten-topografie-monate-werdhoelzli",
-      "name": "Werdhoelzli",
-      "filename": "werdhoelzli.copc.laz",
-      "path": "./scans/Blatten Topografie Monate/werdhoelzli.copc.laz",
-      "url": "./scans/Blatten Topografie Monate/werdhoelzli.copc.laz",
-      "format": "copc",
-      "sizeBytes": 66732294,
+      "id": "scans-blatten-gaussiensplats",
+      "name": "Blatten Gaussiensplats",
+      "filename": "Blatten_gaussienSplats.mov",
+      "path": "./scans/Blatten_gaussienSplats.mov",
+      "url": "./scans/Blatten_gaussienSplats.mov",
+      "format": "mov",
+      "sizeBytes": 27962034,
       "pointCount": null,
       "crs": null,
-      "uploadedAt": "2026-10-05"
+      "uploadedAt": "2026-10-22"
     }
   ]
 }

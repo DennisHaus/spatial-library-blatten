@@ -1,5 +1,5 @@
 window.LOCATION_CONFIG = {
-  pageTitle: "Spatial Library Blatten",
+  pageTitle: "Blatten",
 
   metaDescription:
     "Cloud optimized point cloud viewer for Blatten scans.",
@@ -8,10 +8,10 @@ window.LOCATION_CONFIG = {
     "© ETH ZURICH",
 
   brandTitle: `
-    SPATIAL<br>
-    LIBRARY<br>
     BLATTEN
   `,
+
+liveCatalogUrl: "https://blatten.wi-251124.workers.dev",
 
   brandSubtitle: `
     copc viewer & point cloud model interface | for collecting, storing and
@@ -46,8 +46,13 @@ window.LOCATION_CONFIG = {
 
   navigationMode: "Orbit",
 
+  panelsOpenOnStart: {
+    library: true,
+    inspector: false
+  },
+
   uploadUrl:
-    "https://github.com/DennisHaus/spatial-library-blatten/upload/main/scans",
+    "https://dash.cloudflare.com/cda5eaaba44345e253835586b1cc1b29/r2/default/buckets/blatten",
 
   readmeTitle: "Spatial Library - Read Me",
 

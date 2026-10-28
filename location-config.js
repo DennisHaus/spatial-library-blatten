@@ -11,7 +11,7 @@ window.LOCATION_CONFIG = {
     BLATTEN
   `,
 
-liveCatalogUrl: "https://brinzauls.wi-251124.workers.dev/$site=blatten",
+liveCatalogUrl: "https://brinzauls.wi-251124.workers.dev/?site=blatten",
 
   brandSubtitle: `
     copc viewer & point cloud model interface | for collecting, storing and

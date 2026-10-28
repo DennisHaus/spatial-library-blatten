@@ -68,7 +68,7 @@ liveCatalogUrl: "https://brinzauls.wi-251124.workers.dev/?site=blatten",
   useRawBaseForPaths: false,
 
   rawBaseUrl:
-    "https://github.com/DennisHaus/spatial-library-blatten",
+    "https://pub-422334587b474914b2e57bff91c02755.r2.dev",
 
   downloadPassword: "Voser",
 

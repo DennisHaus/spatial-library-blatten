@@ -11,7 +11,7 @@ window.LOCATION_CONFIG = {
     BLATTEN
   `,
 
-liveCatalogUrl: "https://blatten.wi-251124.workers.dev",
+liveCatalogUrl: "https://workerspatiallibraries.wi-251124.workers.dev",
 
   brandSubtitle: `
     copc viewer & point cloud model interface | for collecting, storing and
@@ -21,7 +21,7 @@ liveCatalogUrl: "https://blatten.wi-251124.workers.dev",
     <br><br>
     See all Places <a
       class="subtitle-link"
-      href="https://dennishaus.github.io/overview"
+      href="https://xxx.github.io/overview"
       target="_blank"
       rel="noopener"
     >
@@ -53,6 +53,7 @@ liveCatalogUrl: "https://blatten.wi-251124.workers.dev",
 
   uploadUrl:
     "https://dash.cloudflare.com/cda5eaaba44345e253835586b1cc1b29/r2/default/buckets/blatten",
+
 
   readmeTitle: "Spatial Library - Read Me",
 

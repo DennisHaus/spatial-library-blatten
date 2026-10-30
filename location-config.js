@@ -11,8 +11,6 @@ window.LOCATION_CONFIG = {
     BLATTEN
   `,
 
-    catalogUrl: "./catalog.json",
-
 liveCatalogUrl: "https://brinzauls.wi-251124.workers.dev/?site=blatten",
 
   brandSubtitle: `
@@ -59,9 +57,7 @@ liveCatalogUrl: "https://brinzauls.wi-251124.workers.dev/?site=blatten",
 
   readmeTitle: "Spatial Library - Read Me",
 
-  catalogUrl: "./catalog.json",
-
-  scanPathPrefix: "scans/",
+  catalogUrl: "https://brinzauls.wi-251124.workers.dev/?site=blatten",
 
   /*
     Keep this false when catalog.json contains relative paths,

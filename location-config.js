@@ -11,6 +11,8 @@ window.LOCATION_CONFIG = {
     BLATTEN
   `,
 
+    catalogUrl: "./catalog.json",
+
 liveCatalogUrl: "https://brinzauls.wi-251124.workers.dev/?site=blatten",
 
   brandSubtitle: `
@@ -65,12 +67,16 @@ liveCatalogUrl: "https://brinzauls.wi-251124.workers.dev/?site=blatten",
     Keep this false when catalog.json contains relative paths,
     for example: scans/scan-01.copc.laz
   */
-  useRawBaseForPaths: false,
+  useRawBaseForPaths: true,
 
   rawBaseUrl:
     "https://pub-422334587b474914b2e57bff91c02755.r2.dev",
 
   downloadPassword: "Voser",
+
+  /* Needed now, because uploadUrl no longer points to GitHub */
+  locationsSaveUrl:
+    "https://github.com/DennisHaus/spatial-library-blatten",
 
   readmeHtml: `
     <section>

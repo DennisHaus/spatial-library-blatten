@@ -11,7 +11,7 @@ window.LOCATION_CONFIG = {
     BLATTEN
   `,
 
-  catalogUrl: "./catalog.json",
+  catalogUrl: "https://brinzauls.wi-251124.workers.dev/?site=blatten",
 
 liveCatalogUrl: "https://brinzauls.wi-251124.workers.dev/?site=blatten",
 
@@ -59,7 +59,7 @@ liveCatalogUrl: "https://brinzauls.wi-251124.workers.dev/?site=blatten",
 
   readmeTitle: "Spatial Library - Read Me",
 
-  catalogUrl: "./catalog.json",
+  catalogUrl: "https://brinzauls.wi-251124.workers.dev/?site=blatten",
 
   scanPathPrefix: "scans/",
 

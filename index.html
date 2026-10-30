@@ -75,48 +75,74 @@
       </div>
 
       <div class="topbar-actions">
-        <a
-          id="addModel"
-          class="button button-secondary"
-          href="#"
-          target="_blank"
-          rel="noopener"
-          title="Add COPC-Model through Github"
-        >
-          Add Model
-        </a>
+        <!-- First line: Add Data, Export PNG, resolution, Read Me -->
+        <div class="topbar-row">
+          <a
+            id="addModel"
+            class="button button-secondary"
+            href="#"
+            target="_blank"
+            rel="noopener"
+            title="Add scans, images, videos, audio or text to the R2 storage"
+          >
+            Add Data
+          </a>
 
-        <div class="screenshot-export-controls">
+          <div class="screenshot-export-controls">
+            <button
+              id="exportScreenshot"
+              class="toolbar-button"
+              type="button"
+              title="Export PNG Image to Desktop"
+            >
+              Export PNG
+            </button>
+
+            <select
+              id="screenshotScale"
+              class="toolbar-button screenshot-scale-select"
+              aria-label="Screenshot resolution"
+              title="1x-5x Viewer Resolution"
+            >
+              <option value="1">1x</option>
+              <option value="2">2x</option>
+              <option value="3" selected>3x</option>
+              <option value="4">4x</option>
+              <option value="5">5x</option>
+            </select>
+          </div>
+
           <button
-            id="exportScreenshot"
+            id="OpenDescription"
             class="toolbar-button"
             type="button"
-            title="Export PNG Image to Desktop"
           >
-            Export PNG
+            Read Me
           </button>
-
-          <select
-            id="screenshotScale"
-            class="toolbar-button screenshot-scale-select"
-            aria-label="Screenshot resolution"
-            title="1x-5x Viewer Resolution"
-          >
-            <option value="1">1x</option>
-            <option value="2">2x</option>
-            <option value="3" selected>3x</option>
-            <option value="4">4x</option>
-            <option value="5">5x</option>
-          </select>
         </div>
 
-        <button
-          id="OpenDescription"
-          class="toolbar-button"
-          type="button"
-        >
-          Read Me
-        </button>
+        <!-- Second line: media icons -->
+        <div class="topbar-row">
+          <button
+            id="toggleMediaIcons"
+            class="button button-secondary"
+            type="button"
+            aria-pressed="true"
+            title="Media icons: all, colored by folder, only expanded folders, or hidden (P)"
+          >
+            Icons: All
+          </button>
+
+          <button
+            id="toggleTimeline"
+            class="button button-secondary"
+            type="button"
+            aria-pressed="false"
+            title="Show a year timeline at the bottom of the viewer"
+          >
+            Timeline
+          </button>
+        </div>
       </div>
     </header>
 
@@ -131,7 +157,7 @@
         <div class="panel-header">
           <div>
             <div class="panel-title">
-              Model Library
+              Model library
             </div>
 
             <div
@@ -230,7 +256,7 @@
           </div>
 
           <div class="viewer-help">
-            Orbit: leftMouse · Pan: rightMouse · Zoom: wheel · arrow-Keys · AWSD-Keys · ./, Speed
+            Orbit: leftMouse · Pan: rightMouse · Zoom: wheel · arrow-Keys · AWSD-Keys · ./, Speed · ⌘/Ctrl-click: Measure · P: Media icons
           </div>
         </div>
 
@@ -832,11 +858,11 @@
 
       <div>
         <span>
-          Accepted: .copc.laz, .las, .laz, .jpg, .jpeg, .png
+          Accepted: .copc.laz, .las, .laz, .jpg, .jpeg, .png, .mp4, .mp3, .wav, .txt, .md
         </span>
 
         <span>
-          Maximum: 95 MiB
+          Maximum: 300 MB
         </span>
       </div>
     </footer>
@@ -879,6 +905,12 @@
       </div>
 
       <div class="description-dialog-body">
+        <section
+          id="usageStats"
+          class="usage-stats"
+          aria-label="Usage statistics"
+        ></section>
+
         <div id="descriptionContent"></div>
       </div>
     </div>
@@ -918,6 +950,10 @@
 
   <script src="./location-config.js"></script>
   <script src="./location-loader.js"></script>
+  <script src="./usage-stats.js"></script>
   <script src="./app.js"></script>
+  <script src="./measure.js"></script>
+  <script src="./media-pins.js"></script>
+  <script src="./timeline.js"></script>
 </body>
 </html>

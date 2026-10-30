@@ -25,6 +25,15 @@ var CONFIG = {
     LOCATION_CONFIG.catalogUrl ||
     "./catalog.json",
 
+  /*
+    Optional Cloudflare Worker that lists the R2 bucket live.
+    When set, new uploads appear immediately; catalog.json still
+    provides names and media locations.
+  */
+  liveCatalogUrl:
+    LOCATION_CONFIG.liveCatalogUrl ||
+    "",
+
   defaultPointBudget:
     30000000,
 
@@ -37,7 +46,7 @@ var CONFIG = {
     visitor chose is remembered in their browser.
   */
   navigationMode:
-    "fly",
+    "orbit",
 
   /* How far the view turns per pixel of mouse drag */
   lookSensitivity:
@@ -333,11 +342,30 @@ function bindDropdown(
     return;
   }
 
+  /*
+    Open or closed on start: set per location in location-config.js
+    (panelsOpenOnStart). Without that setting, index.html decides.
+  */
+  var panelName =
+    {
+      toggleLibrary: "library",
+      toggleInspector: "inspector"
+    }[buttonId];
+
+  var startSettings =
+    (
+      window.LOCATION_CONFIG &&
+      window.LOCATION_CONFIG.panelsOpenOnStart
+    ) ||
+    {};
+
   var expanded =
-    button.getAttribute(
-      "aria-expanded"
-    ) ===
-    "true";
+    typeof startSettings[panelName] === "boolean"
+      ? startSettings[panelName]
+      : button.getAttribute(
+        "aria-expanded"
+      ) ===
+        "true";
 
   setDropdownState(
     button,
@@ -844,76 +872,280 @@ function disableXROnViewer() {
 /* CATALOG                                                                    */
 /* -------------------------------------------------------------------------- */
 
-function loadCatalog() {
+/*
+  Fetches a catalog file and returns its list of entries.
+*/
+function fetchCatalogEntries(
+  url
+) {
   var separator =
-    CONFIG.catalogUrl.indexOf(
-      "?"
-    ) === -1
+    url.indexOf("?") === -1
       ? "?"
       : "&";
 
-  var requestUrl =
-    CONFIG.catalogUrl +
-    separator +
-    "cacheBust=" +
-    Date.now();
-
   return fetch(
-    requestUrl,
+    url + separator + "cacheBust=" + Date.now(),
     {
       cache: "no-store"
     }
   )
-    .then(
-      function (response) {
-        if (
-          !response.ok
-        ) {
-          throw new Error(
-            "Catalog request failed with HTTP " +
-            response.status
+    .then(function (response) {
+      if (!response.ok) {
+        throw new Error(
+          "Catalog request failed with HTTP " +
+          response.status
+        );
+      }
+
+      return response.json();
+    })
+    .then(function (data) {
+      var entries = [];
+
+      if (Array.isArray(data)) {
+        entries = data;
+      } else if (data && Array.isArray(data.scans)) {
+        entries = data.scans;
+      } else if (data && Array.isArray(data.folders)) {
+        entries = data.folders;
+      }
+
+      return flattenCatalogEntries(
+        entries,
+        ""
+      ).filter(function (scan) {
+        return !isInHiddenFolder(scan);
+      });
+    });
+}
+
+/*
+  Files inside a folder whose name starts with "_" (for example
+  scans/Haus/_media/foto.jpg) are not shown in the library. They can
+  still be embedded in Markdown files. Applies to catalog.json and to
+  the live R2 list alike.
+*/
+/*
+  DISPLAY NAMES
+  What the library, media windows and icons show. The stored name is
+  not changed, so search, sorting and the timeline still use it.
+    - one leading single digit is dropped ("0_Strategie" -> "Strategie");
+      years like "2020" are kept
+    - words that also appear in the folder path are dropped, so
+      "0_Strategie_Brienz_blicken" in "Brienz Blicken" -> "Strategie"
+*/
+var NAME_SEPARATORS =
+  /[\s_\-.]+/;
+
+function stripLeadingDigit(
+  value
+) {
+  return String(value || "")
+    .trim()
+    .replace(/^\d(?:[\s_\-.]+|$)/, "");
+}
+
+function comparableWord(
+  word
+) {
+  return String(word)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+}
+
+function displayFolderName(
+  folderName
+) {
+  return stripLeadingDigit(folderName) ||
+    String(folderName || "");
+}
+
+function displayScanName(
+  scan
+) {
+  var original =
+    String(
+      (scan && (scan.name || scan.filename)) || ""
+    );
+
+  var base =
+    stripLeadingDigit(original);
+
+  var folderWords =
+    new Set();
+
+  String((scan && scan.folderPath) || "")
+    .split("/")
+    .forEach(function (part) {
+      stripLeadingDigit(part)
+        .split(NAME_SEPARATORS)
+        .forEach(function (word) {
+          /* Numbers in folder names never remove numbers (years) */
+          if (word && !/^\d+$/.test(word)) {
+            folderWords.add(comparableWord(word));
+          }
+        });
+    });
+
+  var words =
+    base
+      .split(NAME_SEPARATORS)
+      .filter(Boolean);
+
+  var kept =
+    words.filter(function (word) {
+      return !folderWords.has(comparableWord(word));
+    });
+
+  if (kept.length === words.length) {
+    return base || original;
+  }
+
+  /* If every word is in the folder name, keep the full name */
+  return kept.length
+    ? kept.join(" ")
+    : base || original;
+}
+
+function isInHiddenFolder(
+  scan
+) {
+  var path =
+    String(
+      (scan && (scan.path || scan.url)) || ""
+    )
+      .split(/[?#]/)[0]
+      .replace(/^https?:\/\/[^/]+/i, "");
+
+  var folders =
+    path.split("/").slice(0, -1);
+
+  if (scan && scan.folderPath) {
+    folders =
+      folders.concat(String(scan.folderPath).split("/"));
+  }
+
+  return folders.some(function (part) {
+    try {
+      part = decodeURIComponent(part);
+    } catch (error) {
+      /* Keep the raw name if it is not valid URL encoding */
+    }
+
+    return /^_/.test(part.trim());
+  });
+}
+
+function catalogPathKey(
+  scan
+) {
+  return String(
+    (scan && (scan.path || scan.url)) || ""
+  ).replace(/^\.\//, "");
+}
+
+/*
+  The live list decides which files exist. Matching entries from
+  catalog.json add what only GitHub knows: names, ids, upload dates
+  and media locations.
+*/
+function mergeLiveCatalog(
+  liveScans,
+  githubScans
+) {
+  var byPath =
+    new Map();
+
+  githubScans.forEach(function (scan) {
+    byPath.set(
+      catalogPathKey(scan),
+      scan
+    );
+  });
+
+  return liveScans.map(function (live) {
+    var previous =
+      byPath.get(
+        catalogPathKey(live)
+      );
+
+    if (!previous) {
+      return live;
+    }
+
+    return Object.assign(
+      {},
+      live,
+      previous,
+      {
+        filename: live.filename,
+        path: live.path,
+        url: live.url,
+        format: live.format,
+        sizeBytes: live.sizeBytes
+      }
+    );
+  });
+}
+
+function loadCatalog() {
+  var githubRequest =
+    fetchCatalogEntries(
+      CONFIG.catalogUrl
+    );
+
+  var request;
+
+  if (CONFIG.liveCatalogUrl) {
+    request =
+      Promise.all([
+        fetchCatalogEntries(
+          CONFIG.liveCatalogUrl
+        ).catch(function (error) {
+          console.warn(
+            "Live file list unavailable, using catalog.json only:",
+            error
+          );
+
+          return null;
+        }),
+
+        githubRequest.catch(function (error) {
+          console.warn(
+            "catalog.json unavailable, using the live file list only:",
+            error
+          );
+
+          return null;
+        })
+      ]).then(function (results) {
+        var live = results[0];
+        var github = results[1];
+
+        if (live) {
+          return mergeLiveCatalog(
+            live,
+            github || []
           );
         }
 
-        return response.json();
-      }
-    )
+        if (github) {
+          return github;
+        }
+
+        throw new Error(
+          "Neither the live file list nor catalog.json could be loaded."
+        );
+      });
+  } else {
+    request =
+      githubRequest;
+  }
+
+  return request
     .then(
-      function (data) {
-        var entries =
-  [];
-
-if (
-  Array.isArray(
-    data
-  )
-) {
-  entries =
-    data;
-} else if (
-  data &&
-  Array.isArray(
-    data.scans
-  )
-) {
-  entries =
-    data.scans;
-} else if (
-  data &&
-  Array.isArray(
-    data.folders
-  )
-) {
-  entries =
-    data.folders;
-}
-
-var scans =
-  flattenCatalogEntries(
-    entries,
-    ""
-  );
-
+      function (scans) {
         var previousScans =
           new Map();
 
@@ -1161,17 +1393,344 @@ function isImageScan(scan) {
     format === "image" ||
     format === "mp4" ||
     format === "mov" ||
-    format === "video"
+    format === "video" ||
+    format === "mp3" ||
+    format === "wav" ||
+    format === "audio" ||
+    format === "txt" ||
+    format === "md" ||
+    format === "text"
   ) {
     return true;
   }
 
-  return /\.(jpg|jpeg|png|mp4|mov)(\?.*)?$/i.test(
+  return /\.(jpg|jpeg|png|mp4|mov|mp3|wav|txt|md)(\?.*)?$/i.test(
     scan.url ||
     scan.path ||
     scan.filename ||
     ""
   );
+}
+
+function isAudioScan(scan) {
+  if (!scan) {
+    return false;
+  }
+
+  var format =
+    String(
+      scan.format ||
+      ""
+    ).toLowerCase();
+
+  if (
+    format === "mp3" ||
+    format === "wav" ||
+    format === "audio"
+  ) {
+    return true;
+  }
+
+  return /\.(mp3|wav)(\?.*)?$/i.test(
+    scan.url ||
+    scan.path ||
+    scan.filename ||
+    ""
+  );
+}
+
+function isTextScan(scan) {
+  if (!scan) {
+    return false;
+  }
+
+  var format =
+    String(
+      scan.format ||
+      ""
+    ).toLowerCase();
+
+  if (
+    format === "txt" ||
+    format === "md" ||
+    format === "text"
+  ) {
+    return true;
+  }
+
+  return /\.(txt|md)(\?.*)?$/i.test(
+    scan.url ||
+    scan.path ||
+    scan.filename ||
+    ""
+  );
+}
+
+function isMarkdownScan(scan) {
+  return (
+    String(scan.format || "").toLowerCase() === "md" ||
+    /\.md(\?.*)?$/i.test(
+      scan.url ||
+      scan.path ||
+      scan.filename ||
+      ""
+    )
+  );
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+/*
+  Small Markdown renderer for text popups: headings, paragraphs,
+  bold, italic, inline code, code blocks, lists, quotes, links, images
+  and horizontal rules. All text is escaped first, so a file cannot
+  inject HTML or scripts.
+
+  Images: ![description](picture.jpg) or ![description](picture.jpg "Caption")
+  Relative paths are resolved from the folder of the Markdown file.
+*/
+function renderMarkdown(source, baseUrl) {
+  var base =
+    new URL(baseUrl || ".", window.location.href);
+
+  /* Only web and relative addresses, never javascript: or data: */
+  function resolveUrl(url) {
+    var plain =
+      url.replace(/&amp;/g, "&");
+
+    if (/^\s*[a-z][a-z0-9+.-]*:/i.test(plain) && !/^\s*https?:/i.test(plain)) {
+      return null;
+    }
+
+    try {
+      /* Spaces in file names may be written as is or as %20 */
+      return escapeHtml(new URL(plain.replace(/ /g, "%20"), base).href);
+    } catch (error) {
+      return null;
+    }
+  }
+
+  function inline(text) {
+    /* Images become tokens first, so the rules below cannot touch them */
+    var images = [];
+
+    var html = escapeHtml(text)
+      .replace(
+        /!\[([^\]]*)\]\(\s*([^)"]+?)\s*(?:&quot;([^)]*?)&quot;)?\s*\)/g,
+        function (match, alt, url, caption) {
+          var src =
+            resolveUrl(url);
+
+          if (!src) {
+            return alt;
+          }
+
+          var image =
+            '<a class="md-image" href="' + src + '" target="_blank" rel="noopener">' +
+              '<img src="' + src + '" alt="' + alt + '" loading="lazy">' +
+            "</a>";
+
+          images.push(
+            caption
+              ? '<span class="md-figure">' + image +
+                  '<span class="md-caption">' + caption + "</span></span>"
+              : image
+          );
+
+          return "\u0000" + (images.length - 1) + "\u0000";
+        }
+      );
+
+    return html
+      .replace(/`([^`]+)`/g, "<code>$1</code>")
+      .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+      .replace(/(^|[^*])\*([^*\s][^*]*)\*/g, "$1<em>$2</em>")
+      .replace(
+        /(^|[^!])\[([^\]]+)\]\(((?:https?:\/\/|\.?\.?\/)?[^\s)]+)\)/g,
+        function (match, before, label, url) {
+          var href =
+            resolveUrl(url);
+
+          if (!href) {
+            return before + label;
+          }
+
+          return (
+            before +
+            '<a href="' + href + '" target="_blank" rel="noopener">' +
+            label +
+            "</a>"
+          );
+        }
+      )
+      .replace(/\u0000(\d+)\u0000/g, function (match, index) {
+        return images[Number(index)];
+      });
+  }
+
+  var lines =
+    String(source).replace(/\r\n?/g, "\n").split("\n");
+
+  var html = [];
+  var paragraph = [];
+  var quote = [];
+  var list = null;
+  var inCode = false;
+  var code = [];
+
+  function flushParagraph() {
+    if (paragraph.length) {
+      html.push("<p>" + inline(paragraph.join(" ")) + "</p>");
+      paragraph = [];
+    }
+  }
+
+  /* Consecutive "> " lines form one quote, each on its own line */
+  function flushQuote() {
+    if (quote.length) {
+      html.push(
+        "<blockquote>" +
+        quote.map(inline).join("<br>") +
+        "</blockquote>"
+      );
+      quote = [];
+    }
+  }
+
+  function flushList() {
+    if (list) {
+      html.push(
+        "<" + list.type + ">" +
+        list.items.map(function (item) {
+          return "<li>" + inline(item) + "</li>";
+        }).join("") +
+        "</" + list.type + ">"
+      );
+      list = null;
+    }
+  }
+
+  lines.forEach(function (line) {
+    if (!/^\s*>/.test(line)) {
+      flushQuote();
+    }
+
+    if (/^\s*```/.test(line)) {
+      if (inCode) {
+        html.push("<pre><code>" + escapeHtml(code.join("\n")) + "</code></pre>");
+        code = [];
+        inCode = false;
+      } else {
+        flushParagraph();
+        flushList();
+        inCode = true;
+      }
+      return;
+    }
+
+    if (inCode) {
+      code.push(line);
+      return;
+    }
+
+    var heading =
+      line.match(/^(#{1,6})\s+(.*)$/);
+
+    var bullet =
+      line.match(/^\s*[-*+]\s+(.*)$/);
+
+    var numbered =
+      line.match(/^\s*\d+[.)]\s+(.*)$/);
+
+    if (!line.trim()) {
+      flushParagraph();
+      flushList();
+    } else if (heading) {
+      flushParagraph();
+      flushList();
+      html.push(
+        "<h" + heading[1].length + ">" +
+        inline(heading[2]) +
+        "</h" + heading[1].length + ">"
+      );
+    } else if (/^\s*([-*_])(\s*\1){2,}\s*$/.test(line)) {
+      flushParagraph();
+      flushList();
+      html.push("<hr>");
+    } else if (/^\s*>/.test(line)) {
+      flushParagraph();
+      flushList();
+      quote.push(
+        line.replace(/^\s*>\s?/, "")
+      );
+    } else if (bullet || numbered) {
+      flushParagraph();
+
+      var type =
+        bullet ? "ul" : "ol";
+
+      if (!list || list.type !== type) {
+        flushList();
+        list = { type: type, items: [] };
+      }
+
+      list.items.push((bullet || numbered)[1]);
+    } else {
+      flushList();
+      paragraph.push(line.trim());
+    }
+  });
+
+  if (inCode) {
+    html.push("<pre><code>" + escapeHtml(code.join("\n")) + "</code></pre>");
+  }
+
+  flushQuote();
+  flushParagraph();
+  flushList();
+
+  return html.join("\n");
+}
+
+function loadTextIntoPopup(
+  scan,
+  element
+) {
+  element.textContent =
+    "Loading...";
+
+  fetch(
+    scan.url,
+    { cache: "no-store" }
+  )
+    .then(function (response) {
+      if (!response.ok) {
+        throw new Error(
+          "HTTP " + response.status
+        );
+      }
+
+      return response.text();
+    })
+    .then(function (text) {
+      if (isMarkdownScan(scan)) {
+        element.classList.add("text-popup-markdown");
+        element.innerHTML = renderMarkdown(text, scan.url);
+      } else {
+        element.classList.add("text-popup-plain");
+        element.textContent = text;
+      }
+    })
+    .catch(function (error) {
+      element.textContent =
+        "The text could not be loaded (" + error.message + ").";
+    });
 }
 
 function normalizeScan(
@@ -1298,8 +1857,12 @@ function normalizeScan(
   var url =
     "";
 
+    var isAbsolute =
+    /^https?:\/\//i.test(suppliedUrl);
+
   if (
-    suppliedUrl
+    suppliedUrl &&
+    (isAbsolute || !CONFIG.useRawBaseForPaths)
   ) {
     url =
       resolveUrl(
@@ -1331,7 +1894,7 @@ function normalizeScan(
     !normalizedFormat
   ) {
     normalizedFormat =
-      /\.(jpg|jpeg|png|mp4|mov)(\?.*)?$/i.test(
+      /\.(jpg|jpeg|png|mp4|mov|mp3|wav|txt|md)(\?.*)?$/i.test(
         path ||
         filename
       )
@@ -1375,8 +1938,39 @@ function normalizeScan(
       scan.uploadedAt ||
       "",
 
+    /* Optional [x, y, z] where a media file is pinned in the view */
+    location:
+      parseScanLocation(
+        scan.location
+      ),
+
     loading: false
   };
+}
+
+function parseScanLocation(
+  value
+) {
+  if (
+    !value
+  ) {
+    return null;
+  }
+
+  var list =
+    Array.isArray(value)
+      ? value
+      : [value.x, value.y, value.z];
+
+  var numbers =
+    list.slice(0, 3).map(Number);
+
+  return (
+    numbers.length === 3 &&
+    numbers.every(function (n) { return isFinite(n); })
+  )
+    ? { x: numbers[0], y: numbers[1], z: numbers[2] }
+    : null;
 }
 
 function resolveUrl(
@@ -1403,6 +1997,11 @@ function resolveUrl(
 function buildRawUrl(
   path
 ) {
+  path =
+      String(path)
+        .replace(/^\.\//, "")
+        .replace(/^scans\//, "");
+
   var base =
     CONFIG.rawBaseUrl.replace(
       /\/+$/,
@@ -1431,6 +2030,7 @@ function buildRawUrl(
     encodedPath
   );
 }
+
 
 function reconcileLoadedClouds() {
   var catalogIds =
@@ -1584,6 +2184,16 @@ function updateScanCount() {
         : "scans"
     )
   );
+  if (window.UsageStats) {
+    window.UsageStats.setDocuments(count);
+  }
+
+  if (window.MediaPins) {
+    window.MediaPins.refresh();
+  }
+  if (window.Timeline) {
+    window.Timeline.refresh();
+  }
 }
 
 function buildLibraryTree(
@@ -1815,8 +2425,9 @@ function createScanCard(
 
 
   name.textContent =
-    scan.name;
+    displayScanName(scan);
 
+  /* The tooltip keeps the full name */
   name.title =
     scan.name;
 
@@ -2105,7 +2716,7 @@ function renderLibraryTree(
         );
 
       summary.textContent =
-        folderName;
+        displayFolderName(folderName);
 
       var count =
         document.createElement(
@@ -2393,9 +3004,13 @@ function openImagePopup(
     "image-popup-title";
 
   title.textContent =
+    displayScanName(scan) ||
+    "Media";
+
+  title.title =
     scan.name ||
     scan.filename ||
-    "Media";
+    "";
 
   var closeButton =
     document.createElement(
@@ -2436,7 +3051,41 @@ function openImagePopup(
     "image-popup-content";
 
   var media;
+
+  var isAudio =
+    isAudioScan(
+      scan
+    );
+
+  if (
+    isAudio
+  ) {
+    popup.classList.add(
+      "audio-popup"
+    );
+  }
+
+  var isText =
+    !isAudio &&
+    isTextScan(
+      scan
+    );
+
+  if (
+    isText
+  ) {
+    /* Text windows can be resized freely, not in a fixed ratio */
+    popup.classList.add(
+      "text-popup"
+    );
+
+    popup.dataset.freeResize =
+      "true";
+  }
+
   var isVideo =
+    !isAudio &&
+    !isText &&
     /\.mp4(\?.*)?$/i.test(
       scan.url ||
       scan.path ||
@@ -2450,6 +3099,40 @@ function openImagePopup(
       "mp4";
 
   if (
+    isText
+  ) {
+    media =
+      document.createElement(
+        "div"
+      );
+
+    media.className =
+      "text-popup-body";
+
+    loadTextIntoPopup(
+      scan,
+      media
+    );
+  } else if (
+    isAudio
+  ) {
+    media =
+      document.createElement(
+        "audio"
+      );
+
+    media.controls =
+      true;
+
+    media.preload =
+      "metadata";
+
+    media.setAttribute(
+      "aria-label",
+      scan.name ||
+      "Audio"
+    );
+  } else if (
     isVideo
   ) {
     media =
@@ -2483,8 +3166,12 @@ function openImagePopup(
       "Image";
   }
 
-  media.src =
-    scan.url;
+  if (
+    !isText
+  ) {
+    media.src =
+      scan.url;
+  }
 
   content.appendChild(
     media
@@ -2498,12 +3185,19 @@ function openImagePopup(
     content
   );
 
-  [
-    "ne",
-    "se",
-    "sw",
-    "nw"
-  ].forEach(
+  /*
+    Audio players have a fixed size, so they get no resize handles.
+  */
+  (
+    isAudio
+      ? []
+      : [
+        "ne",
+        "se",
+        "sw",
+        "nw"
+      ]
+  ).forEach(
     function (
       direction
     ) {
@@ -2564,10 +3258,34 @@ function openImagePopup(
     closeButton
   );
 
+  if (
+    isAudio
+  ) {
+    setStatus(
+      scan.name +
+      " opened",
+      "idle"
+    );
+
+    return;
+  }
+
   bindImagePopupResizing(
     popup,
     media
   );
+
+  if (
+    isText
+  ) {
+    setStatus(
+      scan.name +
+      " opened",
+      "idle"
+    );
+
+    return;
+  }
 
   if (
     isVideo
@@ -2930,10 +3648,16 @@ function bindImagePopupResizing(
             popup
           );
 
+          var freeResize =
+            popup.dataset.freeResize ===
+            "true";
+
           var aspectRatio =
-            Number(
-              popup.dataset.aspectRatio
-            );
+            freeResize
+              ? 1
+              : Number(
+                popup.dataset.aspectRatio
+              );
 
           if (
             !isFinite(
@@ -2942,13 +3666,13 @@ function bindImagePopupResizing(
             aspectRatio <= 0
           ) {
             var mediaWidth =
-  image.naturalWidth ||
-  image.videoWidth ||
+  media.naturalWidth ||
+  media.videoWidth ||
   0;
 
 var mediaHeight =
-  image.naturalHeight ||
-  image.videoHeight ||
+  media.naturalHeight ||
+  media.videoHeight ||
   0;
 
 if (
@@ -3028,26 +3752,45 @@ if (
               heightFromY *
               aspectRatio;
 
-            var width =
-              Math.abs(
-                dx
-              ) >=
-              Math.abs(
-                dy *
-                aspectRatio
-              )
-                ? widthFromX
-                : widthFromY;
+            var width;
+            var height;
 
-            width =
-              Math.max(
-                width,
-                minimumWidth
-              );
+            if (
+              freeResize
+            ) {
+              width =
+                Math.max(
+                  widthFromX,
+                  minimumWidth
+                );
 
-            var height =
-              width /
-              aspectRatio;
+              height =
+                Math.max(
+                  heightFromY,
+                  160
+                );
+            } else {
+              width =
+                Math.abs(
+                  dx
+                ) >=
+                Math.abs(
+                  dy *
+                  aspectRatio
+                )
+                  ? widthFromX
+                  : widthFromY;
+
+              width =
+                Math.max(
+                  width,
+                  minimumWidth
+                );
+
+              height =
+                width /
+                aspectRatio;
+            }
 
             var left =
               startLeft;
@@ -3421,6 +4164,16 @@ function loadScan(
                 " loaded",
                 "idle"
               );
+
+              return;
+            }
+
+            /* The timeline loads years without moving the camera */
+            if (
+              scan.skipFitOnLoad
+            ) {
+              scan.skipFitOnLoad =
+                false;
 
               return;
             }
@@ -7821,6 +8574,10 @@ function downloadActiveScan() {
   link.click();
 
   link.remove();
+
+  if (window.UsageStats) {
+    window.UsageStats.track("downloads");
+  }
 }
 
 
@@ -8844,6 +9601,9 @@ function exportScreenshot() {
       filename,
       "idle"
     );
+    if (window.UsageStats) {
+      window.UsageStats.track("renders");
+    }
   }
 
   function renderScreenshotFrame() {
@@ -9779,7 +10539,7 @@ bindDescriptionDialog();
 */
 
 var navigation = {
-  mode: "fly",
+  mode: "orbit",
   controls: null,
   pivot: null,
   radius: null,
@@ -9802,6 +10562,23 @@ var NAVIGATION_HELP = {
   walk:
     "Look: left drag · Walk: WASD/arrows (stays level) · Up/down: E/C · Glide: wheel · Speed: , ."
 };
+
+/* Shorter help on phones and tablets */
+var NAVIGATION_HELP_TOUCH = {
+  orbit:
+    "Orbit · Rotate: one finger · Zoom: pinch · Pan: two fingers · New center: double-tap · Measure: press and hold",
+  fly:
+    "Fly · Look around: one finger · Glide: pinch · Pan: two fingers · Look at point: double-tap · Measure: press and hold",
+  walk:
+    "Look: one finger · Glide: pinch · Pan: two fingers · Measure: press and hold"
+};
+
+function isTouchDevice() {
+  return Boolean(
+    window.matchMedia &&
+    window.matchMedia("(pointer: coarse)").matches
+  );
+}
 
 function smoothFactor(
   deltaSeconds,
@@ -10156,7 +10933,7 @@ function setNavigationMode(
     help
   ) {
     help.textContent =
-      NAVIGATION_HELP[mode];
+      (isTouchDevice() ? NAVIGATION_HELP_TOUCH : NAVIGATION_HELP)[mode];
   }
 
   if (
@@ -10171,12 +10948,229 @@ function setNavigationMode(
   }
 }
 
+/* Column-major 4x4 matrix product a * b (three.js element order) */
+function multiplyMatrixElements(
+  a,
+  b
+) {
+  var out =
+    new Array(16);
+
+  for (var column = 0; column < 4; column++) {
+    for (var row = 0; row < 4; row++) {
+      out[column * 4 + row] =
+        a[row] * b[column * 4] +
+        a[4 + row] * b[column * 4 + 1] +
+        a[8 + row] * b[column * 4 + 2] +
+        a[12 + row] * b[column * 4 + 3];
+    }
+  }
+
+  return out;
+}
+
+/*
+  Picking while a section is active.
+  Potree's own picking can return points that the section hides, so
+  here the loaded points are checked directly: a point counts only if
+  it is inside the section box and lies under the mouse. Of those,
+  the one closest to the camera wins. Returns null if nothing fits.
+*/
+function pickPointInSection(
+  x,
+  y
+) {
+  var volume =
+    state.sectionVolume;
+
+  var camera =
+    viewer.scene.getActiveCamera();
+
+  var canvas =
+    viewer.renderer.domElement;
+
+  if (
+    !volume ||
+    !volume.matrixWorld ||
+    !camera ||
+    !canvas
+  ) {
+    return null;
+  }
+
+  if (typeof volume.updateMatrixWorld === "function") {
+    volume.updateMatrixWorld(true);
+  }
+
+  var inverse =
+    volume.matrixWorld.clone();
+
+  if (typeof inverse.invert === "function") {
+    inverse.invert();
+  } else {
+    inverse.getInverse(volume.matrixWorld);
+  }
+
+  var boxMatrix =
+    inverse.elements;
+
+  var viewProjection =
+    multiplyMatrixElements(
+      camera.projectionMatrix.elements,
+      camera.matrixWorldInverse.elements
+    );
+
+  var width =
+    canvas.clientWidth;
+
+  var height =
+    canvas.clientHeight;
+
+  var best = null;
+  var bestDepth = Infinity;
+  var radii = [5, 12];
+
+  var clouds =
+    (viewer.scene.pointclouds || []).filter(
+      function (cloud) {
+        return cloud.visible !== false;
+      }
+    );
+
+  for (var r = 0; r < radii.length && !best; r++) {
+    var radius2 =
+      radii[r] * radii[r];
+
+    clouds.forEach(function (cloud) {
+      (cloud.visibleNodes || []).forEach(function (node) {
+        var points =
+          node.sceneNode ||
+          node;
+
+        var geometry =
+          points && points.geometry;
+
+        var attribute =
+          geometry &&
+          geometry.attributes &&
+          geometry.attributes.position;
+
+        if (
+          !attribute ||
+          !attribute.array ||
+          !points.matrixWorld
+        ) {
+          return;
+        }
+
+        var world =
+          points.matrixWorld.elements;
+
+        var m =
+          multiplyMatrixElements(
+            viewProjection,
+            world
+          );
+
+        var array =
+          attribute.array;
+
+        var stride =
+          attribute.itemSize || 3;
+
+        var count =
+          attribute.count ||
+          Math.floor(array.length / stride);
+
+        for (var i = 0; i < count; i++) {
+          var index =
+            i * stride;
+
+          var px = array[index];
+          var py = array[index + 1];
+          var pz = array[index + 2];
+
+          var w =
+            m[3] * px + m[7] * py + m[11] * pz + m[15];
+
+          if (w <= 0) {
+            continue;
+          }
+
+          var sx =
+            ((m[0] * px + m[4] * py + m[8] * pz + m[12]) / w + 1) / 2 * width;
+
+          var sy =
+            (1 - (m[1] * px + m[5] * py + m[9] * pz + m[13]) / w) / 2 * height;
+
+          var dx = sx - x;
+          var dy = sy - y;
+
+          if (dx * dx + dy * dy > radius2) {
+            continue;
+          }
+
+          var depth =
+            (m[2] * px + m[6] * py + m[10] * pz + m[14]) / w;
+
+          if (depth >= bestDepth) {
+            continue;
+          }
+
+          /* world position */
+          var wx = world[0] * px + world[4] * py + world[8] * pz + world[12];
+          var wy = world[1] * px + world[5] * py + world[9] * pz + world[13];
+          var wz = world[2] * px + world[6] * py + world[10] * pz + world[14];
+
+          /* inside the section box? (box spans -0.5 ... 0.5) */
+          var bx = boxMatrix[0] * wx + boxMatrix[4] * wy + boxMatrix[8] * wz + boxMatrix[12];
+          var by = boxMatrix[1] * wx + boxMatrix[5] * wy + boxMatrix[9] * wz + boxMatrix[13];
+          var bz = boxMatrix[2] * wx + boxMatrix[6] * wy + boxMatrix[10] * wz + boxMatrix[14];
+
+          if (
+            bx < -0.5 || bx > 0.5 ||
+            by < -0.5 || by > 0.5 ||
+            bz < -0.5 || bz > 0.5
+          ) {
+            continue;
+          }
+
+          bestDepth = depth;
+          best = { x: wx, y: wy, z: wz };
+        }
+      });
+    });
+  }
+
+  if (!best) {
+    return null;
+  }
+
+  /* Return the same vector type Potree uses */
+  var result =
+    camera.position.clone();
+
+  result.set(best.x, best.y, best.z);
+
+  return result;
+}
+
 /* Point of the scan under a pixel of the canvas, or null */
 function pickPointAt(
   x,
   y
 ) {
   try {
+    /* With a section, only points inside the slice can be picked */
+    if (
+      state.sectionVolume
+    ) {
+      return pickPointInSection(
+        x,
+        y
+      );
+    }
+
     if (
       !window.Potree ||
       !Potree.Utils ||
@@ -10264,6 +11258,56 @@ function lookAtSmoothly(
   }
 }
 
+/*
+  Zoom by an amount in wheel pixels (positive = out, negative = in).
+  Used by the mouse wheel and by the two-finger pinch on touchscreens.
+*/
+function applyNavigationZoom(
+  amount
+) {
+  amount =
+    Math.max(-300, Math.min(300, amount));
+
+  if (
+    isOrthographic()
+  ) {
+    navigation.orthoTarget =
+      Math.max(
+        (navigation.orthoTarget || viewer.scene.view.radius || 1) *
+        Math.pow(1.0012, amount),
+        0.01
+      );
+
+    return;
+  }
+
+  if (
+    navigation.mode === "orbit"
+  ) {
+    navigation.holdPosition =
+      false;
+
+    navigation.targetRadius =
+      Math.max(
+        (navigation.targetRadius || getCanvasDistance()) *
+        Math.pow(1.0012, amount),
+        0.02
+      );
+  } else {
+    var speedScale =
+      (Number(state.navigationSpeed) || 0.35) /
+      (Number(CONFIG.navigationSpeed) || 0.35);
+
+    /* one wheel notch glides about 8% of the scene distance */
+    navigation.glide -=
+      (amount / 100) *
+      0.08 *
+      getCanvasDistance() *
+      speedScale /
+      CONFIG.glideTime;
+  }
+}
+
 function bindNavigationMouse(
   canvas
 ) {
@@ -10277,8 +11321,294 @@ function bindNavigationMouse(
     ) ||
     canvas;
 
+  /*
+    TOUCH
+    One finger:          rotate (like left drag)
+    Two fingers:         pinch to zoom, move both to pan
+    Double-tap:          new center / look at point (like double-click)
+    Press and hold:      measure a point (like Cmd/Ctrl-click)
+  */
+  var touches =
+    new Map();
+
+  var pinch =
+    null;
+
+  var lastTap =
+    null;
+
+  var lastTouchTime =
+    0;
+
+  var longPress =
+    null;
+
+  var LONG_PRESS_MS = 550;
+  var DOUBLE_TAP_MS = 300;
+  var TAP_SLOP_PX = 12;
+
+  function getPinch() {
+    var list =
+      Array.from(touches.values());
+
+    var a = list[0];
+    var b = list[1];
+
+    return {
+      x: (a.x + b.x) / 2,
+      y: (a.y + b.y) / 2,
+      distance: Math.hypot(a.x - b.x, a.y - b.y)
+    };
+  }
+
+  function cancelLongPress() {
+    if (longPress) {
+      clearTimeout(longPress.timer);
+      longPress = null;
+    }
+  }
+
+  function pickAtClient(
+    clientX,
+    clientY
+  ) {
+    var rect =
+      canvas.getBoundingClientRect();
+
+    return pickPointAt(
+      clientX - rect.left,
+      clientY - rect.top
+    );
+  }
+
+  function startLook(
+    pointerId,
+    x,
+    y
+  ) {
+    navigation.drag = {
+      id: pointerId,
+      type: "look",
+      x: x,
+      y: y
+    };
+  }
+
+  function touchDown(event) {
+    event.preventDefault();
+
+    lastTouchTime =
+      performance.now();
+
+    touches.set(event.pointerId, {
+      x: event.clientX,
+      y: event.clientY
+    });
+
+    try {
+      surface.setPointerCapture(
+        event.pointerId
+      );
+    } catch (
+      error
+    ) {
+      /* ignore */
+    }
+
+    navigation.holdPosition =
+      false;
+
+    if (touches.size === 1) {
+      startLook(
+        event.pointerId,
+        event.clientX,
+        event.clientY
+      );
+
+      /* Double-tap */
+      var now =
+        performance.now();
+
+      if (
+        lastTap &&
+        now - lastTap.time < DOUBLE_TAP_MS &&
+        Math.hypot(
+          event.clientX - lastTap.x,
+          event.clientY - lastTap.y
+        ) < TAP_SLOP_PX * 3
+      ) {
+        lastTap = null;
+
+        var point =
+          pickAtClient(
+            event.clientX,
+            event.clientY
+          );
+
+        if (point) {
+          lookAtSmoothly(point);
+        }
+
+        return;
+      }
+
+      lastTap = {
+        time: now,
+        x: event.clientX,
+        y: event.clientY
+      };
+
+      /* Press and hold: measure */
+      longPress = {
+        x: event.clientX,
+        y: event.clientY,
+        timer: setTimeout(function () {
+          var press = longPress;
+
+          longPress = null;
+          lastTap = null;
+
+          if (
+            !press ||
+            touches.size !== 1 ||
+            !window.MeasureTool
+          ) {
+            return;
+          }
+
+          /* Stop rotating, then measure as if Cmd/Ctrl-clicked */
+          navigation.drag = null;
+
+          window.MeasureTool.handlePointerDown({
+            clientX: press.x,
+            clientY: press.y,
+            button: 0,
+            metaKey: true,
+            ctrlKey: false,
+            shiftKey: false,
+            preventDefault: function () {}
+          });
+
+          if (navigator.vibrate) {
+            navigator.vibrate(15);
+          }
+        }, LONG_PRESS_MS)
+      };
+
+      return;
+    }
+
+    /* Second finger: switch from rotating to pinch and pan */
+    cancelLongPress();
+    lastTap = null;
+    navigation.drag = null;
+
+    if (touches.size === 2) {
+      pinch = getPinch();
+    }
+  }
+
+  function touchMove(event) {
+    if (!touches.has(event.pointerId)) {
+      return false;
+    }
+
+    event.preventDefault();
+
+    touches.set(event.pointerId, {
+      x: event.clientX,
+      y: event.clientY
+    });
+
+    if (
+      longPress &&
+      Math.hypot(
+        event.clientX - longPress.x,
+        event.clientY - longPress.y
+      ) > TAP_SLOP_PX
+    ) {
+      cancelLongPress();
+      lastTap = null;
+    }
+
+    if (
+      touches.size >= 2 &&
+      pinch
+    ) {
+      var current =
+        getPinch();
+
+      if (
+        pinch.distance > 0 &&
+        current.distance > 0
+      ) {
+        /* Fingers apart = zoom in, together = zoom out */
+        applyNavigationZoom(
+          Math.log(pinch.distance / current.distance) /
+          Math.log(1.0012)
+        );
+      }
+
+      panView(
+        current.x - pinch.x,
+        current.y - pinch.y,
+        canvas
+      );
+
+      pinch = current;
+
+      return true;
+    }
+
+    /* One finger: let the normal drag code rotate */
+    return false;
+  }
+
+  function touchUp(event) {
+    if (!touches.has(event.pointerId)) {
+      return;
+    }
+
+    touches.delete(event.pointerId);
+    cancelLongPress();
+
+    lastTouchTime =
+      performance.now();
+
+    if (touches.size >= 2) {
+      pinch = getPinch();
+      return;
+    }
+
+    pinch = null;
+
+    if (touches.size === 1) {
+      /* Back to one finger: continue rotating from where it is, without a jump */
+      var remaining =
+        Array.from(touches.entries())[0];
+
+      startLook(
+        remaining[0],
+        remaining[1].x,
+        remaining[1].y
+      );
+
+      return;
+    }
+
+    navigation.drag = null;
+  }
+
   surface.addEventListener(
     "contextmenu",
+    function (event) {
+      event.preventDefault();
+    }
+  );
+
+  /* Older iOS Safari: stop the page itself from zooming */
+  surface.addEventListener(
+    "gesturestart",
     function (event) {
       event.preventDefault();
     }
@@ -10287,6 +11617,29 @@ function bindNavigationMouse(
   surface.addEventListener(
     "pointerdown",
     function (event) {
+      if (
+        event.pointerType === "touch"
+      ) {
+        touchDown(event);
+        return;
+      }
+
+      /* Shift + Cmd/Ctrl-click: pin the front media file here */
+      if (
+        window.MediaPins &&
+        window.MediaPins.handlePointerDown(event)
+      ) {
+        return;
+      }
+
+      /* Cmd/Ctrl-click: measure points instead of moving the camera */
+      if (
+        window.MeasureTool &&
+        window.MeasureTool.handlePointerDown(event)
+      ) {
+        return;
+      }
+
       var pan =
         event.button === 2 ||
         event.button === 1 ||
@@ -10339,6 +11692,13 @@ function bindNavigationMouse(
   surface.addEventListener(
     "pointermove",
     function (event) {
+      if (
+        event.pointerType === "touch" &&
+        touchMove(event)
+      ) {
+        return;
+      }
+
       var drag =
         navigation.drag;
 
@@ -10389,6 +11749,13 @@ function bindNavigationMouse(
   var endDrag =
     function (event) {
       if (
+        event.pointerType === "touch"
+      ) {
+        touchUp(event);
+        return;
+      }
+
+      if (
         navigation.drag &&
         navigation.drag.id === event.pointerId
       ) {
@@ -10420,47 +11787,9 @@ function bindNavigationMouse(
         event.deltaY *
         (event.deltaMode === 1 ? 33 : event.deltaMode === 2 ? 400 : 1);
 
-      amount =
-        Math.max(-300, Math.min(300, amount));
-
-      if (
-        isOrthographic()
-      ) {
-        navigation.orthoTarget =
-          Math.max(
-            (navigation.orthoTarget || viewer.scene.view.radius || 1) *
-            Math.pow(1.0012, amount),
-            0.01
-          );
-
-        return;
-      }
-
-      if (
-        navigation.mode === "orbit"
-      ) {
-        navigation.holdPosition =
-          false;
-
-        navigation.targetRadius =
-          Math.max(
-            (navigation.targetRadius || getCanvasDistance()) *
-            Math.pow(1.0012, amount),
-            0.02
-          );
-      } else {
-        var speedScale =
-          (Number(state.navigationSpeed) || 0.35) /
-          (Number(CONFIG.navigationSpeed) || 0.35);
-
-        /* one wheel notch glides about 8% of the scene distance */
-        navigation.glide -=
-          (amount / 100) *
-          0.08 *
-          getCanvasDistance() *
-          speedScale /
-          CONFIG.glideTime;
-      }
+      applyNavigationZoom(
+        amount
+      );
     },
     { passive: false }
   );
@@ -10468,13 +11797,25 @@ function bindNavigationMouse(
   surface.addEventListener(
     "dblclick",
     function (event) {
-      var rect =
-        canvas.getBoundingClientRect();
+      /* Two quick Cmd/Ctrl-clicks are measurements, not a double-click */
+      if (
+        event.metaKey ||
+        event.ctrlKey
+      ) {
+        return;
+      }
+
+      /* Touch double-taps are already handled above */
+      if (
+        performance.now() - lastTouchTime < 800
+      ) {
+        return;
+      }
 
       var point =
-        pickPointAt(
-          event.clientX - rect.left,
-          event.clientY - rect.top
+        pickAtClient(
+          event.clientX,
+          event.clientY
         );
 
       if (

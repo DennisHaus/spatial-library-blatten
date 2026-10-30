@@ -1,0 +1,717 @@
+diff --git a/app.js b/app.js
+index cb8571d..a33a885 100644
+--- a/app.js
++++ b/app.js
+@@ -2011,6 +2011,9 @@ function updateScanCount() {
+   if (window.MediaPins) {
+     window.MediaPins.refresh();
+   }
++  if (window.Timeline) {
++    window.Timeline.refresh();
++  }
+ }
+ 
+ function buildLibraryTree(
+@@ -3980,6 +3983,16 @@ function loadScan(
+               return;
+             }
+ 
++            /* The timeline loads years without moving the camera */
++            if (
++              scan.skipFitOnLoad
++            ) {
++              scan.skipFitOnLoad =
++                false;
++
++              return;
++            }
++
+             fitActiveScan();
+           },
+           500
+diff --git a/index.html b/index.html
+index 27c0b5e..1440646 100644
+--- a/index.html
++++ b/index.html
+@@ -128,9 +128,19 @@
+             class="button button-secondary"
+             type="button"
+             aria-pressed="true"
+-            title="Show or hide the media icons in the viewer (P)"
++            title="Media icons: all, only expanded folders, or hidden (P)"
+           >
+-            Hide Icons
++            Icons: All
++          </button>
++
++          <button
++            id="toggleTimeline"
++            class="button button-secondary"
++            type="button"
++            aria-pressed="false"
++            title="Show a year timeline at the bottom of the viewer"
++          >
++            Timeline
+           </button>
+         </div>
+       </div>
+@@ -944,5 +954,6 @@
+   <script src="./app.js"></script>
+   <script src="./measure.js"></script>
+   <script src="./media-pins.js"></script>
++  <script src="./timeline.js"></script>
+ </body>
+ </html>
+diff --git a/media-pins.js b/media-pins.js
+index 5f03426..ad6af27 100644
+--- a/media-pins.js
++++ b/media-pins.js
+@@ -12,7 +12,11 @@
+     2. Shift + Cmd-click (Mac) or Shift + Ctrl-click (Windows) on a
+        point of a scan. Doing it again moves the icon.
+   Shift + Cmd/Ctrl-click on an icon removes the location.
+-  The "Hide Icons" button or the P key shows or hides all icons.
++  The icons button or the P key cycles through three modes:
++    all     - every icon is shown
++    folders - only icons whose folder is expanded in the library
++              (icons outside any folder are always shown)
++    none    - no icons
+ 
+   Where locations are stored:
+     - First in this browser (localStorage), so they survive a reload.
+@@ -41,7 +45,8 @@
+   var layer = null;
+   var bar = null;
+   var frame = null;
+-  var visible = readVisibility();
++  var MODES = ["all", "folders", "none"];
++  var mode = readMode();
+   var pinElements = new Map();
+ 
+   var ICONS = {
+@@ -101,17 +106,25 @@
+     }
+   }
+ 
+-  function readVisibility() {
++  function readMode() {
+     try {
+-      return window.localStorage.getItem(VISIBILITY_KEY) !== "false";
++      var stored =
++        window.localStorage.getItem(VISIBILITY_KEY);
++
++      /* Older versions stored "true" / "false" */
++      if (stored === "false") {
++        return "none";
++      }
++
++      return MODES.indexOf(stored) >= 0 ? stored : "all";
+     } catch (error) {
+-      return true;
++      return "all";
+     }
+   }
+ 
+-  function writeVisibility() {
++  function writeMode() {
+     try {
+-      window.localStorage.setItem(VISIBILITY_KEY, String(visible));
++      window.localStorage.setItem(VISIBILITY_KEY, mode);
+     } catch (error) {
+       /* ignore */
+     }
+@@ -440,12 +453,15 @@
+     }
+ 
+     layer.style.display =
+-      visible ? "" : "none";
++      mode === "none" ? "none" : "";
+ 
+-    if (!visible) {
++    if (mode === "none") {
+       return;
+     }
+ 
++    var openFolders =
++      mode === "folders" ? getOpenFolderPaths() : null;
++
+     var project =
+       window.MeasureTool && window.MeasureTool.project;
+ 
+@@ -466,7 +482,11 @@
+       var element =
+         entry.element;
+ 
+-      if (!position) {
++      if (
++        !position ||
++        (openFolders && !isInOpenFolder(entry.scan, openFolders)) ||
++        (window.Timeline && !window.Timeline.allows(entry.scan))
++      ) {
+         element.style.display = "none";
+         return;
+       }
+@@ -482,6 +502,51 @@
+     });
+   }
+ 
++  /*
++    Folder paths that are actually visible in the library: the folder
++    itself and every parent folder must be expanded.
++  */
++  function getOpenFolderPaths() {
++    var open =
++      new Set();
++
++    document
++      .querySelectorAll("#libraryList details.scan-folder")
++      .forEach(function (folder) {
++        if (!folder.open || !folder.dataset.folderPath) {
++          return;
++        }
++
++        var parent =
++          folder.parentElement &&
++          folder.parentElement.closest("details.scan-folder");
++
++        while (parent) {
++          if (!parent.open) {
++            return;
++          }
++
++          parent =
++            parent.parentElement &&
++            parent.parentElement.closest("details.scan-folder");
++        }
++
++        open.add(folder.dataset.folderPath);
++      });
++
++    return open;
++  }
++
++  function isInOpenFolder(scan, openFolders) {
++    var path =
++      typeof window.normalizeFolderPath === "function"
++        ? window.normalizeFolderPath(scan.folderPath)
++        : String(scan.folderPath || "");
++
++    /* Media at the top level of the library has no folder to expand */
++    return !path || openFolders.has(path);
++  }
++
+   function loop() {
+     updatePins();
+     frame = window.requestAnimationFrame(loop);
+@@ -822,23 +887,39 @@
+       return;
+     }
+ 
+-    button.textContent =
+-      visible ? "Hide Icons" : "Show Icons";
++    button.textContent = {
++      all: "Icons: All",
++      folders: "Icons: Open Folders",
++      none: "Icons: Hidden"
++    }[mode];
+ 
+     button.setAttribute(
+       "aria-pressed",
+-      String(visible)
++      String(mode !== "none")
+     );
+   }
+ 
+-  function setVisible(value) {
+-    visible = Boolean(value);
++  function setMode(value) {
++    mode = MODES.indexOf(value) >= 0 ? value : "all";
+ 
+-    writeVisibility();
++    writeMode();
+     updateToggleButton();
+     updatePins();
+ 
+-    status(visible ? "Media icons shown" : "Media icons hidden");
++    status({
++      all: "All media icons shown",
++      folders: "Media icons shown for expanded folders only",
++      none: "Media icons hidden"
++    }[mode]);
++  }
++
++  function cycleMode() {
++    setMode(MODES[(MODES.indexOf(mode) + 1) % MODES.length]);
++  }
++
++  /* Kept for older callers: true = all, false = none */
++  function setVisible(value) {
++    setMode(value ? "all" : "none");
+   }
+ 
+   /* ------------------------------------------------------------------------ */
+@@ -861,7 +942,7 @@
+         tag !== "select" &&
+         !(event.target && event.target.isContentEditable)
+       ) {
+-        setVisible(!visible);
++        cycleMode();
+       }
+     }
+   );
+@@ -872,7 +953,7 @@
+ 
+     if (button) {
+       button.addEventListener("click", function () {
+-        setVisible(!visible);
++        cycleMode();
+       });
+     }
+ 
+@@ -899,6 +980,8 @@
+ 
+     setVisible: setVisible,
+ 
++    setMode: setMode,
++
+     parseLocation: parseLocation
+   };
+ })();
+diff --git a/style.css b/style.css
+index 98aff6c..fac3ea7 100644
+--- a/style.css
++++ b/style.css
+@@ -2521,3 +2521,74 @@ button:active {
+   border: 0;
+   border-top: 1px solid rgba(255, 255, 255, 0.2);
+ }
++
++
++/* -------------------------------------------------------------------------- */
++/* TIMELINE                                                                   */
++/* -------------------------------------------------------------------------- */
++
++#toggleTimeline[aria-pressed="false"] {
++  color: var(--muted);
++}
++
++.timeline-panel {
++  position: absolute;
++  z-index: 16;
++
++  /* Sits just above the viewer toolbar */
++  bottom: 64px;
++  left: 50%;
++
++  width: min(640px, calc(100% - 32px));
++  padding: 10px 14px 6px;
++
++  transform: translateX(-50%);
++
++  border: 1px solid var(--border);
++  background: rgba(0, 0, 0, 0.82);
++}
++
++.timeline-panel.hidden {
++  display: none;
++}
++
++.timeline-slider {
++  display: block;
++
++  width: 100%;
++  margin: 0;
++
++  accent-color: var(--accent-strong);
++  cursor: pointer;
++}
++
++.timeline-stops {
++  display: flex;
++  justify-content: space-between;
++
++  margin-top: 4px;
++}
++
++.timeline-stop {
++  min-height: 0;
++  padding: 2px 4px;
++
++  border: none;
++
++  color: var(--muted);
++  background: none;
++
++  font-size: 10px;
++  letter-spacing: 0.06em;
++  cursor: pointer;
++}
++
++.timeline-stop:hover,
++.timeline-stop.is-active {
++  color: var(--accent-strong);
++  background: none;
++}
++
++.timeline-stop:focus-visible {
++  outline: 1px solid var(--border-light);
++}
+diff --git a/timeline.js b/timeline.js
+new file mode 100644
+index 0000000..41d12ad
+--- /dev/null
++++ b/timeline.js
+@@ -0,0 +1,353 @@
++"use strict";
++
++/*
++  TIMELINE
++  The "Timeline" button next to the icons button shows a year slider at
++  the bottom of the viewer. Moving it to a year:
++    - shows every point cloud whose name contains that year
++      (it is loaded first if needed),
++    - hides every other point cloud whose name contains a year,
++    - shows only the media icons of that year and closes open media
++      windows of other years.
++  Point clouds and media without a year in their name are not touched.
++  "All" shows every loaded point cloud and every icon again.
++
++  The year is the first number from 1900 to 2099 in the name, so
++  "2025 Brinzauls Color" belongs to 2025.
++
++  Needs from app.js: state, loadScan, isImageScan, closeImagePopup,
++  renderLibrary, setStatus.
++*/
++
++(function () {
++  var ALL = "all";
++
++  var panel = null;
++  var slider = null;
++  var stops = null;
++  var years = [];
++  var current = ALL;
++  var open = false;
++  var loadTimer = null;
++
++  function getCatalog() {
++    return window.state && Array.isArray(state.catalog)
++      ? state.catalog
++      : [];
++  }
++
++  function yearOf(scan) {
++    var match =
++      String(scan && scan.name || "").match(/(?:^|\D)((?:19|20)\d{2})(?!\d)/);
++
++    return match ? match[1] : null;
++  }
++
++  function isMedia(scan) {
++    return typeof window.isImageScan === "function" &&
++      window.isImageScan(scan);
++  }
++
++  function collectYears() {
++    var found =
++      new Set();
++
++    getCatalog().forEach(function (scan) {
++      var year =
++        yearOf(scan);
++
++      if (year) {
++        found.add(year);
++      }
++    });
++
++    return Array.from(found).sort();
++  }
++
++  function status(message) {
++    if (typeof window.setStatus === "function") {
++      window.setStatus(message, "idle");
++    }
++  }
++
++
++  /* ------------------------------------------------------------------------ */
++  /* APPLYING A YEAR                                                          */
++  /* ------------------------------------------------------------------------ */
++
++  /* Hide or show what is already loaded; returns scans still to load */
++  function applyVisibility() {
++    var toLoad = [];
++
++    getCatalog().forEach(function (scan) {
++      var year =
++        yearOf(scan);
++
++      if (!year) {
++        return;
++      }
++
++      var match =
++        current === ALL || year === current;
++
++      if (isMedia(scan)) {
++        if (
++          !match &&
++          state.openImages &&
++          state.openImages.has(scan.id) &&
++          typeof window.closeImagePopup === "function"
++        ) {
++          window.closeImagePopup(scan.id);
++        }
++
++        return;
++      }
++
++      var cloud =
++        state.loadedClouds && state.loadedClouds.get(scan.id);
++
++      if (cloud) {
++        cloud.visible = match;
++      } else if (match && current !== ALL && !scan.loading) {
++        toLoad.push(scan);
++      }
++    });
++
++    return toLoad;
++  }
++
++  function loadMissing(scans) {
++    if (typeof window.loadScan !== "function") {
++      return;
++    }
++
++    scans.forEach(function (scan) {
++      /* Keep the camera where it is while scrubbing through years */
++      scan.skipFitOnLoad = true;
++
++      window.loadScan(scan).then(function () {
++        /* The year may have changed while this cloud was loading */
++        applyVisibility();
++
++        if (typeof window.renderLibrary === "function") {
++          window.renderLibrary();
++        }
++      });
++    });
++  }
++
++  function setYear(year) {
++    current = year;
++
++    updateStops();
++
++    var toLoad =
++      applyVisibility();
++
++    if (typeof window.renderLibrary === "function") {
++      window.renderLibrary();
++    }
++
++    status(
++      current === ALL
++        ? "Timeline: all years"
++        : "Timeline: " + current +
++          (toLoad.length ? " (loading " + toLoad.length + ")" : "")
++    );
++
++    /* Wait until the slider stops moving before loading large files */
++    window.clearTimeout(loadTimer);
++
++    if (toLoad.length) {
++      loadTimer = window.setTimeout(function () {
++        loadMissing(applyVisibility());
++      }, 350);
++    }
++  }
++
++
++  /* ------------------------------------------------------------------------ */
++  /* PANEL                                                                    */
++  /* ------------------------------------------------------------------------ */
++
++  function valueList() {
++    return [ALL].concat(years);
++  }
++
++  function createPanel() {
++    var renderArea =
++      document.getElementById("potree_render_area");
++
++    var host =
++      renderArea && renderArea.parentElement;
++
++    if (!host) {
++      return null;
++    }
++
++    panel =
++      document.createElement("div");
++
++    panel.className =
++      "timeline-panel hidden";
++
++    panel.innerHTML =
++      '<input class="timeline-slider" type="range" min="0" step="1" ' +
++        'aria-label="Year">' +
++      '<div class="timeline-stops"></div>';
++
++    slider =
++      panel.querySelector(".timeline-slider");
++
++    stops =
++      panel.querySelector(".timeline-stops");
++
++    slider.addEventListener("input", function () {
++      setYear(valueList()[Number(slider.value)]);
++    });
++
++    stops.addEventListener("click", function (event) {
++      var stop =
++        event.target.closest("[data-year]");
++
++      if (stop) {
++        setYear(stop.dataset.year);
++      }
++    });
++
++    /* Keep clicks and drags from reaching the 3D viewer */
++    ["pointerdown", "wheel", "keydown"].forEach(function (type) {
++      panel.addEventListener(type, function (event) {
++        event.stopPropagation();
++      });
++    });
++
++    host.appendChild(panel);
++
++    return panel;
++  }
++
++  function buildStops() {
++    years =
++      collectYears();
++
++    var values =
++      valueList();
++
++    if (values.indexOf(current) < 0) {
++      current = ALL;
++    }
++
++    slider.max =
++      String(values.length - 1);
++
++    stops.innerHTML = "";
++
++    values.forEach(function (value) {
++      var stop =
++        document.createElement("button");
++
++      stop.type = "button";
++      stop.className = "timeline-stop";
++      stop.dataset.year = value;
++      stop.textContent = value === ALL ? "All" : value;
++
++      stops.appendChild(stop);
++    });
++
++    updateStops();
++  }
++
++  function updateStops() {
++    if (!panel) {
++      return;
++    }
++
++    slider.value =
++      String(valueList().indexOf(current));
++
++    stops.querySelectorAll(".timeline-stop").forEach(function (stop) {
++      var active =
++        stop.dataset.year === current;
++
++      stop.classList.toggle("is-active", active);
++      stop.setAttribute("aria-pressed", String(active));
++    });
++  }
++
++  function updateButton() {
++    var button =
++      document.getElementById("toggleTimeline");
++
++    if (button) {
++      button.setAttribute("aria-pressed", String(open));
++    }
++  }
++
++  function setOpen(value) {
++    if (!panel && !createPanel()) {
++      return;
++    }
++
++    open = Boolean(value);
++
++    if (open) {
++      buildStops();
++    }
++
++    panel.classList.toggle("hidden", !open);
++    updateButton();
++
++    if (!open) {
++      /* Closing releases the icon filter; point clouds stay as they are */
++      window.clearTimeout(loadTimer);
++      current = ALL;
++      status("Timeline closed");
++    } else if (years.length === 0) {
++      status("Timeline: no names with a year found");
++    }
++  }
++
++  function bindButton() {
++    var button =
++      document.getElementById("toggleTimeline");
++
++    if (button) {
++      button.addEventListener("click", function () {
++        setOpen(!open);
++      });
++    }
++
++    updateButton();
++  }
++
++  if (document.readyState === "loading") {
++    document.addEventListener("DOMContentLoaded", bindButton, { once: true });
++  } else {
++    bindButton();
++  }
++
++  window.Timeline = {
++    /* Used by media-pins.js: false hides the icon of this scan */
++    allows: function (scan) {
++      if (!open || current === ALL) {
++        return true;
++      }
++
++      var year =
++        yearOf(scan);
++
++      return !year || year === current;
++    },
++
++    /* Called by app.js whenever the catalog is (re)loaded */
++    refresh: function () {
++      if (open) {
++        buildStops();
++      }
++    },
++
++    setYear: setYear,
++    setOpen: setOpen
++  };
++})();

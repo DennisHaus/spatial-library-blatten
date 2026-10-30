@@ -11,6 +11,8 @@ window.LOCATION_CONFIG = {
     BLATTEN
   `,
 
+  catalogUrl: "./catalog.json",
+
 liveCatalogUrl: "https://brinzauls.wi-251124.workers.dev/?site=blatten",
 
   brandSubtitle: `
@@ -57,7 +59,10 @@ liveCatalogUrl: "https://brinzauls.wi-251124.workers.dev/?site=blatten",
 
   readmeTitle: "Spatial Library - Read Me",
 
-  catalogUrl: "https://brinzauls.wi-251124.workers.dev/?site=blatten",
+  catalogUrl: "./catalog.json",
+
+  scanPathPrefix: "scans/",
+
 
   /*
     Keep this false when catalog.json contains relative paths,
@@ -73,6 +78,14 @@ liveCatalogUrl: "https://brinzauls.wi-251124.workers.dev/?site=blatten",
   /* Needed now, because uploadUrl no longer points to GitHub */
   locationsSaveUrl:
     "https://github.com/DennisHaus/spatial-library-blatten",
+
+  coordinateShift: 0,
+
+    usageStats: {
+      enabled: true,
+      apiBase: "https://abacus.jasoncameron.dev",
+      namespace: "blatten"
+    },
 
   readmeHtml: `
     <section>

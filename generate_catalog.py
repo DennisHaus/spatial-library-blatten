@@ -368,6 +368,78 @@ def list_r2_files(settings):
     return sorted(files)
 
 
+def live_catalog_url():
+    """
+    The Worker address for the file list: the environment variable
+    LIVE_CATALOG_URL, or else liveCatalogUrl from location-config.js.
+    """
+    url = os.environ.get("LIVE_CATALOG_URL", "").strip()
+
+    if url:
+        return url
+
+    config = ROOT / "location-config.js"
+
+    if not config.exists():
+        return None
+
+    text = config.read_text(encoding="utf-8")
+
+    # Skip commented-out lines
+    text = re.sub(r"^\s*//.*$", "", text, flags=re.MULTILINE)
+    text = re.sub(r"/\*.*?\*/", "", text, flags=re.DOTALL)
+
+    match = re.search(
+        r"liveCatalogUrl\s*:\s*[\"'`]([^\"'`]+)[\"'`]",
+        text
+    )
+
+    return match.group(1).strip() if match else None
+
+
+def list_live_files(url):
+    """
+    Reads the file list from the Cloudflare Worker. The Worker holds
+    the R2 key, so this repository needs no R2 secrets.
+    Returns a list of (relative path, size in bytes, upload date).
+    """
+    import urllib.request
+
+    request = urllib.request.Request(
+        url,
+        headers={"User-Agent": "spatial-library-catalog"}
+    )
+
+    with urllib.request.urlopen(request, timeout=60) as response:
+        data = json.loads(response.read().decode("utf-8"))
+
+    entries = data.get("scans", []) if isinstance(data, dict) else data
+
+    files = []
+
+    for entry in entries:
+        path = str(entry.get("path") or "").lstrip("./")
+
+        if not path.startswith("scans/"):
+            continue
+
+        filename = path.rsplit("/", 1)[-1]
+
+        if not filename.lower().endswith(SUPPORTED_SUFFIXES):
+            continue
+
+        if is_hidden_path(path[len("scans/"):]):
+            continue
+
+        files.append((
+            path,
+            int(entry.get("sizeBytes") or 0),
+            entry.get("uploadedAt") or date.today().isoformat(),
+        ))
+
+    return sorted(files)
+
+
 def list_repository_files():
     """
     Lists supported files in the scans/ folder of the repository.
@@ -403,13 +475,23 @@ def create_catalog():
 
     scans = []
 
+    # 1. R2 secrets in this repository, 2. the Worker's live list,
+    # 3. the scans/ folder of the repository
     settings = r2_settings()
+    live_url = live_catalog_url()
 
     if settings:
         print("Reading files from R2 bucket:", settings["R2_BUCKET"])
         files = list_r2_files(settings)
+    elif live_url:
+        print("Reading files from the Worker:", live_url)
+        try:
+            files = list_live_files(live_url)
+        except Exception as error:
+            print("Worker unavailable:", error)
+            files = []
     else:
-        print("No R2 settings found, reading the scans/ folder.")
+        print("No R2 settings or Worker found, reading the scans/ folder.")
         files = list_repository_files()
 
     print(
@@ -502,10 +584,38 @@ def create_catalog():
             "(" + file_format + ")"
         )
 
+    # Folder locations: keys ending in "/" in the locations files,
+    # for example "scans/Videos/". Stored as {"Videos": [x, y, z]}.
+    folder_locations = dict(
+        previous_catalog.get("folderLocations") or {}
+    )
+
+    for key, value in new_locations.items():
+        if not key.endswith("/"):
+            continue
+
+        folder = key.rstrip("/")
+
+        if folder.startswith("scans/"):
+            folder = folder[len("scans/"):]
+
+        if not folder:
+            continue
+
+        if value is None:
+            folder_locations.pop(folder, None)
+        else:
+            folder_locations[folder] = value
+
+        print("Folder location:", folder, value)
+
     catalog = {
         "version": 1,
         "scans": scans
     }
+
+    if folder_locations:
+        catalog["folderLocations"] = dict(sorted(folder_locations.items()))
 
     if locations_applied:
         catalog["locationsApplied"] = locations_applied

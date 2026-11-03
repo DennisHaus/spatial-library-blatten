@@ -12,6 +12,9 @@
     2. Shift + Cmd-click (Mac) or Shift + Ctrl-click (Windows) on a
        point of a scan. Doing it again moves the icon.
   Shift + Cmd/Ctrl-click on an icon removes the location.
+  Folders work the same way: open a folder as a window (the small button
+  next to its name in the library, see folder-browser.js), then
+  Shift + Cmd/Ctrl-click. Its icon opens the folder window.
   The icons button or the P key cycles through three modes:
     all     - every icon is shown
     colors  - every icon is shown, colored by its folder
@@ -87,6 +90,12 @@
       '<svg viewBox="0 0 16 16" aria-hidden="true">' +
         '<path d="M4 2h5.5L12.5 5v9h-8.5z"/>' +
         '<path d="M6.3 7.5h4M6.3 9.8h4M6.3 12h2.6"/>' +
+      "</svg>",
+
+    folder:
+      '<svg viewBox="0 0 16 16" aria-hidden="true">' +
+        '<path d="M2 4.5h4l1.3 1.5H14v6.5H2z"/>' +
+        '<path d="M2 7.5h12"/>' +
       "</svg>"
   };
 
@@ -208,12 +217,31 @@
       : [];
   }
 
+  /* Media files plus folders (from folder-browser.js) that can get a pin */
+  function getPinnables() {
+    var list =
+      getCatalog().filter(isMedia);
+
+    if (
+      window.FolderBrowser &&
+      typeof window.FolderBrowser.getFolders === "function"
+    ) {
+      list = list.concat(window.FolderBrowser.getFolders());
+    }
+
+    return list;
+  }
+
   function isMedia(scan) {
     return typeof window.isImageScan === "function" &&
       window.isImageScan(scan);
   }
 
   function mediaKind(scan) {
+    if (scan && scan.isFolder) {
+      return "folder";
+    }
+
     if (
       typeof window.isTextScan === "function" &&
       window.isTextScan(scan)
@@ -262,7 +290,7 @@
   function clearSavedChanges() {
     var changed = false;
 
-    getCatalog().forEach(function (scan) {
+    getPinnables().forEach(function (scan) {
       if (
         hasLocal(scan.id) &&
         sameLocation(
@@ -281,7 +309,7 @@
   }
 
   function getChangedScans() {
-    return getCatalog().filter(function (scan) {
+    return getPinnables().filter(function (scan) {
       return hasLocal(scan.id);
     });
   }
@@ -326,7 +354,7 @@
       return null;
     }
 
-    return getCatalog().find(function (scan) {
+    return getPinnables().find(function (scan) {
       return scan.id === bestId;
     }) || null;
   }
@@ -370,7 +398,9 @@
       '<span class="media-pin-label"></span>';
 
     pin.querySelector(".media-pin-label").textContent =
-      typeof window.displayScanName === "function"
+      scan.isFolder && typeof window.displayFolderName === "function"
+        ? window.displayFolderName(scan.name)
+        : typeof window.displayScanName === "function"
         ? window.displayScanName(scan)
         : scan.name;
 
@@ -400,7 +430,11 @@
           return;
         }
 
-        if (typeof window.openImagePopup === "function") {
+        if (scan.isFolder) {
+          if (window.FolderBrowser) {
+            window.FolderBrowser.open(scan.folderKey);
+          }
+        } else if (typeof window.openImagePopup === "function") {
           window.openImagePopup(scan);
         }
       }
@@ -419,11 +453,8 @@
     var wanted =
       new Map();
 
-    getCatalog().forEach(function (scan) {
-      if (
-        isMedia(scan) &&
-        getLocation(scan)
-      ) {
+    getPinnables().forEach(function (scan) {
+      if (getLocation(scan)) {
         wanted.set(scan.id, scan);
       }
     });
@@ -600,6 +631,13 @@
           paths.add(path);
         }
       });
+
+      /* Folder icons take the color of the files inside them */
+      pinElements.forEach(function (entry) {
+        if (entry.scan.isFolder) {
+          paths.add(entry.scan.folderKey);
+        }
+      });
     }
 
     var order =
@@ -610,7 +648,9 @@
         entry.element;
 
       var path =
-        colored ? folderPathOf(entry.scan) : "";
+        !colored ? "" :
+        entry.scan.isFolder ? entry.scan.folderKey :
+        folderPathOf(entry.scan);
 
       var label =
         element.querySelector(".media-pin-label");
@@ -635,7 +675,8 @@
         folderColor(order.indexOf(path))
       );
 
-      if (label) {
+      /* A folder icon already shows its folder name */
+      if (label && !entry.scan.isFolder) {
         folderLine =
           document.createElement("span");
 
@@ -728,7 +769,7 @@
 
     if (!scan) {
       status(
-        "Open an image, video or audio file from the library first.",
+        "Open a media file or a folder window from the library first.",
         "error"
       );
 
